@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Add New Question - AlgoDeck</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#a985ff",
+                        "primary-light": "#c4aaff",
+                        "background-light": "#f6f5f8",
+                        "background-dark": "#150f23",
+                        "card-light": "#ffffff",
+                        "card-dark": "#1e1633",
+                        "easy-bg": "#dcfce7",
+                        "easy-text": "#166534",
+                        "medium-bg": "#e0f2fe",
+                        "medium-text": "#075985",
+                        "hard-bg": "#ffe4e6",
+                        "hard-text": "#9f1239",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(169, 133, 255, 0.1)',
+                        'glow': '0 0 0 3px rgba(169, 133, 255, 0.15)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar hiding for clean mobile look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-gray-800 dark:text-gray-100 antialiased min-h-screen flex flex-col items-center justify-center">
+<!-- Mobile Container mimicking an iPhone view -->
+<div class="w-full max-w-md h-screen max-h-[900px] bg-background-light dark:bg-background-dark relative flex flex-col overflow-hidden shadow-2xl sm:rounded-[2.5rem] sm:h-[85vh] sm:border-8 sm:border-gray-900">
+<!-- Status Bar Area (Visual only) -->
+<div class="h-12 w-full flex items-center justify-between px-6 pt-2 shrink-0 z-20">
+<span class="text-sm font-semibold">9:41</span>
+<div class="flex gap-1.5">
+<div class="w-4 h-4 rounded-full bg-gray-900 dark:bg-white opacity-20"></div>
+<div class="w-4 h-4 rounded-full bg-gray-900 dark:bg-white opacity-20"></div>
+<div class="w-6 h-4 rounded-[4px] border border-gray-900 dark:border-white opacity-40"></div>
+</div>
+</div>
+<!-- Header -->
+<header class="px-5 py-4 flex items-center justify-between shrink-0 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md z-10 sticky top-0">
+<button class="text-primary hover:text-primary-dark transition-colors font-medium text-base">Cancel</button>
+<h1 class="text-lg font-bold text-gray-900 dark:text-white">Add Question</h1>
+<div class="w-[50px]"></div> <!-- Spacer to balance layout -->
+</header>
+<!-- Main Scrollable Content -->
+<main class="flex-1 overflow-y-auto px-5 pb-32 no-scrollbar">
+<!-- Upload Zone -->
+<div class="mt-4 mb-8">
+<label class="block w-full aspect-[4/3] rounded-xl border-2 border-dashed border-primary/50 hover:border-primary bg-primary/5 dark:bg-primary/10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group relative overflow-hidden">
+<!-- Placeholder Content -->
+<div class="flex flex-col items-center gap-3 group-hover:scale-105 transition-transform duration-300">
+<div class="w-14 h-14 rounded-full bg-white dark:bg-card-dark shadow-soft flex items-center justify-center text-primary">
+<span class="material-icons-round text-3xl">add_a_photo</span>
+</div>
+<p class="text-sm font-medium text-primary/80 dark:text-primary-light">Tap to upload screenshot</p>
+</div>
+<!-- Hidden Input -->
+<input accept="image/*" class="hidden" type="file"/>
+</label>
+</div>
+<!-- Form Fields -->
+<div class="space-y-6">
+<!-- Title Input -->
+<div class="space-y-2">
+<label class="text-sm font-semibold text-gray-500 dark:text-gray-400 ml-1" for="title">Title</label>
+<div class="relative group">
+<input class="w-full bg-white dark:bg-card-dark border-0 rounded-lg px-4 py-4 text-gray-900 dark:text-white placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-primary/50 transition-all duration-200 outline-none" id="title" placeholder="e.g. Two Sum" type="text"/>
+<div class="absolute inset-0 rounded-lg pointer-events-none border border-transparent group-hover:border-primary/20 transition-colors"></div>
+</div>
+</div>
+<!-- Difficulty Selector -->
+<div class="space-y-2">
+<label class="text-sm font-semibold text-gray-500 dark:text-gray-400 ml-1">Difficulty</label>
+<div class="grid grid-cols-3 gap-3">
+<!-- Easy -->
+<button class="relative rounded-lg py-3 px-2 flex items-center justify-center transition-all duration-200 bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 hover:border-easy-text/30 group">
+<span class="w-2 h-2 rounded-full bg-green-500 mr-2 group-hover:scale-125 transition-transform"></span>
+<span class="text-sm font-medium text-gray-600 dark:text-gray-300 group-hover:text-easy-text">Easy</span>
+</button>
+<!-- Medium (Active State Example) -->
+<button class="relative rounded-lg py-3 px-2 flex items-center justify-center transition-all duration-200 bg-medium-bg/50 dark:bg-medium-text/20 border border-medium-bg ring-1 ring-medium-text/20">
+<span class="w-2 h-2 rounded-full bg-sky-600 mr-2"></span>
+<span class="text-sm font-bold text-medium-text dark:text-sky-300">Medium</span>
+</button>
+<!-- Hard -->
+<button class="relative rounded-lg py-3 px-2 flex items-center justify-center transition-all duration-200 bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 hover:border-hard-text/30 group">
+<span class="w-2 h-2 rounded-full bg-rose-500 mr-2 group-hover:scale-125 transition-transform"></span>
+<span class="text-sm font-medium text-gray-600 dark:text-gray-300 group-hover:text-hard-text">Hard</span>
+</button>
+</div>
+</div>
+<!-- Tags Section -->
+<div class="space-y-3">
+<label class="text-sm font-semibold text-gray-500 dark:text-gray-400 ml-1">Tags</label>
+<!-- Input -->
+<div class="relative flex items-center">
+<span class="absolute left-4 material-icons-round text-gray-400 text-lg">tag</span>
+<input class="w-full bg-white dark:bg-card-dark border-0 rounded-lg pl-10 pr-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-primary/50 outline-none" placeholder="Add a tag..." type="text"/>
+<button class="absolute right-3 p-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-primary hover:text-white transition-colors">
+<span class="material-icons-round text-sm block">add</span>
+</button>
+</div>
+<!-- Chips Container -->
+<div class="flex flex-wrap gap-2 pt-1">
+<!-- Chip 1 -->
+<div class="inline-flex items-center bg-primary/10 dark:bg-primary/20 text-primary-dark dark:text-primary-light px-3 py-1.5 rounded-full text-xs font-semibold border border-primary/10">
+                            Array
+                            <button class="ml-1.5 hover:text-red-500 transition-colors">
+<span class="material-icons-round text-sm align-middle">close</span>
+</button>
+</div>
+<!-- Chip 2 -->
+<div class="inline-flex items-center bg-primary/10 dark:bg-primary/20 text-primary-dark dark:text-primary-light px-3 py-1.5 rounded-full text-xs font-semibold border border-primary/10">
+                            Hash Table
+                            <button class="ml-1.5 hover:text-red-500 transition-colors">
+<span class="material-icons-round text-sm align-middle">close</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Notes Textarea -->
+<div class="space-y-2">
+<label class="text-sm font-semibold text-gray-500 dark:text-gray-400 ml-1" for="notes">Notes</label>
+<textarea class="w-full bg-white dark:bg-card-dark border-0 rounded-lg px-4 py-4 text-gray-900 dark:text-white placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-primary/50 transition-all duration-200 outline-none resize-none text-sm leading-relaxed" id="notes" placeholder="Jot down your approach, time complexity, or key insights..." rows="4"></textarea>
+</div>
+</div>
+</main>
+<!-- Fixed Bottom Action Button -->
+<div class="absolute bottom-0 left-0 w-full px-5 py-6 bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark pointer-events-none z-30">
+<button class="w-full h-14 pointer-events-auto rounded-xl bg-gradient-to-r from-primary to-sky-300 dark:to-sky-500 text-white font-bold text-lg shadow-lg shadow-primary/30 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 group">
+<span class="material-icons-round">save</span>
+                Save Question
+            </button>
+</div>
+</div>
+</body></html>

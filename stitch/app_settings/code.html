@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AlgoDeck Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#a985ff",
+                        "primary-light": "#d4c2ff", 
+                        "primary-dark": "#7a5cc2",
+                        "background-light": "#f6f5f8",
+                        "background-dark": "#150f23",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "full": "9999px" },
+                    boxShadow: {
+                        'soft': '0 10px 40px -10px rgba(169, 133, 255, 0.15)',
+                        'inner-light': 'inset 0 2px 4px 0 rgba(255, 255, 255, 0.5)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar hide for clean mobile look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Custom Toggle Switch Styles */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #a985ff;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #a985ff;
+        }
+        
+        /* Subtle Gradient Background Animation */
+        .animated-bg {
+            background: linear-gradient(-45deg, #f6f5f8, #f0eaff, #e8dffc, #f6f5f8);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+        
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display text-slate-800 antialiased h-screen overflow-hidden selection:bg-primary selection:text-white bg-background-light dark:bg-background-dark">
+<!-- Mobile Container -->
+<div class="mx-auto h-full max-w-md bg-white/50 dark:bg-slate-900/50 relative overflow-hidden flex flex-col shadow-2xl">
+<!-- Animated Pastel Background Layer -->
+<div class="absolute inset-0 -z-10 animated-bg opacity-70 dark:opacity-10"></div>
+<div class="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-primary/20 rounded-full blur-3xl filter"></div>
+<div class="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-300/20 rounded-full blur-3xl filter"></div>
+<!-- Header -->
+<header class="pt-12 pb-4 px-6 flex items-center justify-between z-10">
+<button class="p-2 -ml-2 rounded-full hover:bg-white/40 dark:hover:bg-white/10 transition-colors text-slate-600 dark:text-slate-300">
+<span class="material-icons-round text-3xl">chevron_left</span>
+</button>
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Settings</h1>
+<div class="w-10"></div> <!-- Spacer for center alignment -->
+</header>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto no-scrollbar px-6 pb-24 relative z-10 space-y-8">
+<!-- User Profile Card -->
+<div class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-5 shadow-soft border border-white/50 dark:border-white/5 flex items-center space-x-4">
+<div class="relative">
+<img alt="User Avatar" class="w-16 h-16 rounded-full object-cover border-4 border-white dark:border-slate-700 shadow-sm" data-alt="Smiling young man avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDb55PcTFvoTIdg75G31ItwGR8t4U5lZXbATuSZseTb-xZut6lOJU86QgBx8yD_mvsMuBOto4JjYrHFpgFOTO-M-_cEVBpck5JIJtIxpo49MYZUGCKsvxZHaarjTGGyd438dQUtjivRLEKlhtYcrRN_wNOZtfeLNLZRbmiTUG0VuDyEMUwKdG4SCKyyTABBI-Y8QNnOEj8L3pz5BHcJOauCxxo7xeQ2R84_KXVgzCpbOc7vae7PSnQqoz2k-aTABFaSPW3rUaSSsTI"/>
+<div class="absolute bottom-0 right-0 w-4 h-4 bg-green-400 border-2 border-white dark:border-slate-800 rounded-full"></div>
+</div>
+<div class="flex-1">
+<h2 class="text-lg font-bold text-slate-900 dark:text-white">Alex Chen</h2>
+<p class="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
+<span class="material-icons-round text-xs text-primary">cloud_done</span>
+                        Synced just now
+                    </p>
+</div>
+<button class="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors">
+<span class="material-icons-round">edit</span>
+</button>
+</div>
+<!-- Preferences Section -->
+<section>
+<h3 class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 ml-2">App Preferences</h3>
+<div class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-soft border border-white/60 dark:border-white/5 overflow-hidden">
+<!-- Dark Mode Item -->
+<div class="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-500 dark:text-indigo-300">
+<span class="material-icons-round">dark_mode</span>
+</div>
+<span class="font-medium text-slate-700 dark:text-slate-200">Dark Mode</span>
+</div>
+<!-- Custom Toggle -->
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300 left-0 top-0 border-slate-200 dark:border-slate-600 outline-none" id="darkModeToggle" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer transition-colors duration-300" for="darkModeToggle"></label>
+</div>
+</div>
+<!-- Haptic Feedback Item -->
+<div class="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-pink-50 dark:bg-pink-900/30 flex items-center justify-center text-pink-500 dark:text-pink-300">
+<span class="material-icons-round">vibration</span>
+</div>
+<span class="font-medium text-slate-700 dark:text-slate-200">Haptics</span>
+</div>
+<!-- Custom Toggle (Checked state) -->
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300 left-0 top-0 border-slate-200 dark:border-slate-600 outline-none" id="hapticsToggle" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer transition-colors duration-300" for="hapticsToggle"></label>
+</div>
+</div>
+<!-- Daily Reminder Item -->
+<div class="p-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center text-orange-500 dark:text-orange-300">
+<span class="material-icons-round">notifications</span>
+</div>
+<div class="flex flex-col">
+<span class="font-medium text-slate-700 dark:text-slate-200">Daily Reminder</span>
+<span class="text-xs text-slate-400">9:00 AM</span>
+</div>
+</div>
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-icons-round">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Data Management Section -->
+<section>
+<h3 class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 ml-2">Data Management</h3>
+<div class="grid gap-4">
+<!-- Export Button -->
+<button class="group w-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl shadow-soft border border-white/60 dark:border-white/5 flex items-center justify-between hover:bg-white hover:scale-[1.02] dark:hover:bg-slate-800 transition-all duration-300">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+<span class="material-icons-round">upload</span>
+</div>
+<div class="text-left">
+<span class="block font-semibold text-slate-800 dark:text-white">Export Data</span>
+<span class="block text-xs text-slate-500 dark:text-slate-400">Backup your flashcards to JSON</span>
+</div>
+</div>
+<span class="material-icons-round text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
+</button>
+<!-- Import Button -->
+<button class="group w-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl shadow-soft border border-white/60 dark:border-white/5 flex items-center justify-between hover:bg-white hover:scale-[1.02] dark:hover:bg-slate-800 transition-all duration-300">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500 dark:text-blue-300 group-hover:bg-blue-500 group-hover:text-white transition-colors duration-300">
+<span class="material-icons-round">download</span>
+</div>
+<div class="text-left">
+<span class="block font-semibold text-slate-800 dark:text-white">Import Backup</span>
+<span class="block text-xs text-slate-500 dark:text-slate-400">Restore from a previous file</span>
+</div>
+</div>
+<span class="material-icons-round text-slate-300 group-hover:text-blue-500 transition-colors">chevron_right</span>
+</button>
+<!-- Reset Progress (Destructive) -->
+<button class="group w-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm p-4 rounded-2xl border border-red-100 dark:border-red-900/30 flex items-center justify-between hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors duration-300 mt-2">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-400 dark:text-red-300">
+<span class="material-icons-round text-lg">delete_outline</span>
+</div>
+<span class="font-medium text-red-500 dark:text-red-400">Reset Progress</span>
+</div>
+</button>
+</div>
+</section>
+<!-- Footer Info -->
+<footer class="text-center space-y-2 pt-4">
+<div class="flex justify-center items-center gap-2">
+<span class="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-primary-light flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-primary/30">
+                        AD
+                     </span>
+<span class="text-sm font-bold text-slate-400 tracking-tight">AlgoDeck</span>
+</div>
+<p class="text-xs text-slate-400">Version 1.0.2 (Build 204)</p>
+<div class="flex justify-center gap-4 text-xs text-primary font-medium pt-2">
+<a class="hover:underline" href="#">Privacy Policy</a>
+<a class="hover:underline" href="#">Terms of Service</a>
+</div>
+<p class="text-[10px] text-slate-300 pt-4">Made with ❤️ for LeetCode grinders</p>
+</footer>
+</main>
+<!-- Bottom Tab Bar (Contextual Visual) -->
+<div class="absolute bottom-0 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-6 pt-3 px-6 z-20">
+<div class="flex justify-between items-center text-slate-400">
+<button class="flex flex-col items-center gap-1 w-12 hover:text-primary transition-colors">
+<span class="material-icons-round text-2xl">dashboard</span>
+<span class="text-[10px] font-medium">Decks</span>
+</button>
+<button class="flex flex-col items-center gap-1 w-12 hover:text-primary transition-colors">
+<span class="material-icons-round text-2xl">style</span>
+<span class="text-[10px] font-medium">Study</span>
+</button>
+<!-- Floating FAB placeholder -->
+<div class="relative -top-6">
+<button class="w-14 h-14 bg-primary text-white rounded-full shadow-lg shadow-primary/40 flex items-center justify-center hover:scale-105 transition-transform">
+<span class="material-icons-round text-2xl">add</span>
+</button>
+</div>
+<button class="flex flex-col items-center gap-1 w-12 hover:text-primary transition-colors">
+<span class="material-icons-round text-2xl">insights</span>
+<span class="text-[10px] font-medium">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 w-12 text-primary">
+<span class="material-icons-round text-2xl">settings</span>
+<span class="text-[10px] font-medium">Settings</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>
