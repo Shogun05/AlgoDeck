@@ -2,8 +2,6 @@
 
 A spaced-repetition flashcard app for mastering LeetCode patterns. Built with React Native (Expo), TypeScript, and SQLite.
 
-![AlgoDeck Banner](https://via.placeholder.com/1200x600.png?text=AlgoDeck+Banner)
-
 ## Features
 
 - 🃏 **Spaced Repetition (SM-2)**: Smart algorithm schedules reviews based on your performance.
