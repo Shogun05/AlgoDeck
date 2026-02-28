@@ -3,21 +3,99 @@ import * as Sharing from 'expo-sharing';
 import { questionService } from '../db/questionService';
 import { solutionService } from '../db/solutionService';
 import { revisionService } from '../db/revisionService';
+import { notebookService } from '../db/notebookService';
 import { BackupData, Question, Solution } from '../types';
 import { generateFilename, sanitizeFilename } from '../utils/helpers';
 
 const EXPORT_DIR = `${FileSystem.documentDirectory}exports/`;
 
-const ensureExportDir = async () => {
-    const info = await FileSystem.getInfoAsync(EXPORT_DIR);
+const ensureDir = async (dir: string) => {
+    const info = await FileSystem.getInfoAsync(dir);
     if (!info.exists) {
-        await FileSystem.makeDirectoryAsync(EXPORT_DIR, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     }
 };
 
-// ─── JSON EXPORT ─────────────────────────────────────────────
+// ─── ZIP-LIKE EXPORT (JSON + base64 images bundled) ──────────
+export const exportZip = async (notebookId?: number): Promise<string> => {
+    await ensureDir(EXPORT_DIR);
+
+    let questions = await questionService.getAll(notebookId);
+    const allSolutions = await solutionService.getAll();
+    const revisionLogs = await revisionService.getAll();
+
+    // Filter solutions to only include ones for exported questions
+    const qIds = new Set(questions.map(q => q.id));
+    const solutions = notebookId
+        ? allSolutions.filter(s => qIds.has(s.question_id))
+        : allSolutions;
+    const filteredLogs = notebookId
+        ? revisionLogs.filter(l => qIds.has(l.question_id))
+        : revisionLogs;
+
+    // Bundle images as base64 inside the JSON
+    const bundledQuestions = [];
+    for (const q of questions) {
+        let imageBase64 = '';
+        let imageExt = 'jpg';
+        if (q.screenshot_path) {
+            try {
+                const srcInfo = await FileSystem.getInfoAsync(q.screenshot_path);
+                if (srcInfo.exists) {
+                    imageBase64 = await FileSystem.readAsStringAsync(q.screenshot_path, {
+                        encoding: FileSystem.EncodingType.Base64,
+                    });
+                    const parts = q.screenshot_path.split('.');
+                    imageExt = parts[parts.length - 1] || 'jpg';
+                }
+            } catch { /* skip missing images */ }
+        }
+        bundledQuestions.push({
+            ...q,
+            _image_base64: imageBase64,
+            _image_ext: imageExt,
+        });
+    }
+
+    // Get notebooks for metadata
+    const allNotebooks = await notebookService.getAll();
+    // Include only relevant notebooks (or all if full export)
+    const exportedNotebookIds = new Set(
+        bundledQuestions.map(q => q.notebook_id).filter((id): id is number => id != null)
+    );
+    const notebooksToExport = notebookId
+        ? allNotebooks.filter(nb => nb.id === notebookId)
+        : allNotebooks.filter(nb => exportedNotebookIds.has(nb.id));
+
+    const bundledBackup = {
+        version: 3,
+        exported_at: new Date().toISOString(),
+        notebooks: notebooksToExport,
+        questions: bundledQuestions,
+        solutions,
+        revision_logs: filteredLogs,
+    };
+
+    const filename = generateFilename('algodeck_backup', 'algodeck');
+    const filepath = EXPORT_DIR + filename;
+    await FileSystem.writeAsStringAsync(filepath, JSON.stringify(bundledBackup));
+
+    return filepath;
+};
+
+export const shareFile = async (filepath: string): Promise<void> => {
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+        await Sharing.shareAsync(filepath, {
+            mimeType: 'application/octet-stream',
+            dialogTitle: 'Export AlgoDeck Backup',
+        });
+    }
+};
+
+// ─── LEGACY JSON EXPORT (no images) ─────────────────────────
 export const exportJSON = async (): Promise<string> => {
-    await ensureExportDir();
+    await ensureDir(EXPORT_DIR);
 
     const questions = await questionService.getAll();
     const solutions = await solutionService.getAll();
@@ -36,16 +114,6 @@ export const exportJSON = async (): Promise<string> => {
     await FileSystem.writeAsStringAsync(filepath, JSON.stringify(backup, null, 2));
 
     return filepath;
-};
-
-export const shareFile = async (filepath: string): Promise<void> => {
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (isAvailable) {
-        await Sharing.shareAsync(filepath, {
-            mimeType: 'application/json',
-            dialogTitle: 'Export AlgoDeck Backup',
-        });
-    }
 };
 
 // ─── MARKDOWN EXPORT ─────────────────────────────────────────
@@ -81,7 +149,8 @@ const questionToMarkdown = (question: Question, solutions: Solution[]): string =
         tierSolutions.forEach((sol, i) => {
             if (tierSolutions.length > 1) lines.push(`### Solution ${i + 1}\n`);
             if (sol.code) {
-                lines.push('```');
+                const lang = (sol as any).language || 'python';
+                lines.push(`\`\`\`${lang}`);
                 lines.push(sol.code);
                 lines.push('```\n');
             }
@@ -97,18 +166,12 @@ const questionToMarkdown = (question: Question, solutions: Solution[]): string =
 };
 
 export const exportMarkdown = async (questionId?: number): Promise<string> => {
-    await ensureExportDir();
+    await ensureDir(EXPORT_DIR);
     const mdDir = EXPORT_DIR + 'markdown/';
     const imgDir = mdDir + 'images/';
 
-    const mdInfo = await FileSystem.getInfoAsync(mdDir);
-    if (!mdInfo.exists) {
-        await FileSystem.makeDirectoryAsync(mdDir, { intermediates: true });
-    }
-    const imgInfo = await FileSystem.getInfoAsync(imgDir);
-    if (!imgInfo.exists) {
-        await FileSystem.makeDirectoryAsync(imgDir, { intermediates: true });
-    }
+    await ensureDir(mdDir);
+    await ensureDir(imgDir);
 
     let questions: Question[];
     if (questionId) {
@@ -144,8 +207,6 @@ export const exportMarkdown = async (questionId?: number): Promise<string> => {
 
 export const shareMarkdownExport = async (questionId?: number): Promise<void> => {
     const dirPath = await exportMarkdown(questionId);
-    // On mobile, sharing a directory isn't straightforward
-    // Share the first markdown file as a starting point
     const files = await FileSystem.readDirectoryAsync(dirPath);
     const mdFiles = files.filter(f => f.endsWith('.md'));
     if (mdFiles.length > 0) {

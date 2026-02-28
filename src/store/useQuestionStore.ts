@@ -11,7 +11,7 @@ interface QuestionState {
     searchQuery: string;
     loading: boolean;
 
-    loadQuestions: () => Promise<void>;
+    loadQuestions: (notebookId?: number | null) => Promise<void>;
     loadRecent: () => Promise<void>;
     setSearchQuery: (query: string) => void;
     addQuestion: (data: {
@@ -22,6 +22,7 @@ interface QuestionState {
         ocr_text?: string;
         notes?: string;
         priority?: number;
+        notebook_id?: number | null;
     }) => Promise<number>;
     updateQuestion: (id: number, data: Partial<Question>) => Promise<void>;
     deleteQuestion: (id: number) => Promise<void>;
@@ -38,18 +39,25 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
     searchQuery: '',
     loading: false,
 
-    loadQuestions: async () => {
+    loadQuestions: async (notebookId?: number | null) => {
         set({ loading: true });
         try {
-            const questions = await questionService.getAll();
+            const questions = notebookId !== undefined
+                ? await questionService.getAll(notebookId)
+                : await questionService.getAll();
             const totalCount = questions.length;
             const allTags = await questionService.getAllTags();
             const searchQuery = get().searchQuery;
             const filteredQuestions = searchQuery
-                ? questions.filter(q =>
-                    q.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    q.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-                )
+                ? questions.filter(q => {
+                    const s = searchQuery.toLowerCase();
+                    return (
+                        q.title.toLowerCase().includes(s) ||
+                        q.ocr_text.toLowerCase().includes(s) ||
+                        q.notes.toLowerCase().includes(s) ||
+                        q.tags.some(t => t.toLowerCase().includes(s))
+                    );
+                })
                 : questions;
             set({ questions, filteredQuestions, totalCount, allTags, loading: false });
         } catch (err) {
@@ -70,16 +78,30 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
     setSearchQuery: (query: string) => {
         const questions = get().questions;
         const filteredQuestions = query
-            ? questions.filter(q =>
-                q.title.toLowerCase().includes(query.toLowerCase()) ||
-                q.tags.some(t => t.toLowerCase().includes(query.toLowerCase()))
-            )
+            ? questions.filter(q => {
+                const s = query.toLowerCase();
+                return (
+                    q.title.toLowerCase().includes(s) ||
+                    q.ocr_text.toLowerCase().includes(s) ||
+                    q.notes.toLowerCase().includes(s) ||
+                    q.tags.some(t => t.toLowerCase().includes(s))
+                );
+            })
             : questions;
         set({ searchQuery: query, filteredQuestions });
     },
 
     addQuestion: async (data) => {
-        const id = await questionService.create(data as any);
+        const id = await questionService.create({
+            title: data.title,
+            difficulty: data.difficulty,
+            tags: data.tags,
+            screenshot_path: data.screenshot_path ?? '',
+            ocr_text: data.ocr_text ?? '',
+            notes: data.notes ?? '',
+            priority: data.priority ?? 0,
+            notebook_id: data.notebook_id ?? null,
+        });
         await get().loadQuestions();
         await get().loadRecent();
         return id;

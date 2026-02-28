@@ -6,9 +6,14 @@ import { getDatabase } from './src/db/database';
 import theme from './src/theme/theme';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemeStore } from './src/store/useThemeStore';
+import { useNotebookStore } from './src/store/useNotebookStore';
+import { hapticService } from './src/services/haptics';
+import { sm2IntervalService } from './src/services/sm2Intervals';
 
 export default function App() {
   const [dbReady, setDbReady] = useState(false);
+  const isDarkMode = useThemeStore((s) => s.isDarkMode);
   const [fontsLoaded] = useFonts({
     ...Ionicons.font,
   });
@@ -17,6 +22,10 @@ export default function App() {
     async function initDB() {
       try {
         await getDatabase();
+        await hapticService.init();
+        await sm2IntervalService.init();
+        await useNotebookStore.getState().loadNotebooks();
+        await useNotebookStore.getState().initActiveNotebook();
         setDbReady(true);
       } catch (e) {
         console.error('Failed to initialize database:', e);
@@ -25,10 +34,13 @@ export default function App() {
     initDB();
   }, []);
 
+  const bgColor = isDarkMode ? theme.colors.bg.dark : theme.colors.bg.light;
+  const barStyle = isDarkMode ? 'light-content' : 'dark-content';
+
   if (!dbReady || !fontsLoaded) {
     return (
-      <View style={styles.loading}>
-        <StatusBar barStyle="light-content" backgroundColor={theme.colors.bg.dark} />
+      <View style={[styles.loading, { backgroundColor: bgColor }]}>
+        <StatusBar barStyle={barStyle} backgroundColor={bgColor} />
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
@@ -36,7 +48,7 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.bg.dark} />
+      <StatusBar barStyle={barStyle} backgroundColor={bgColor} />
       <AppNavigator />
     </GestureHandlerRootView>
   );

@@ -1,5 +1,6 @@
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 export type SolutionTier = 'brute' | 'optimized' | 'best';
+export type SolutionLanguage = 'python' | 'cpp' | 'java';
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 
 export interface Question {
@@ -11,6 +12,7 @@ export interface Question {
     ocr_text: string;
     notes: string;
     priority: number;
+    notebook_id: number | null;
     created_at: string;
     last_reviewed: string | null;
     next_review_date: string | null;
@@ -28,6 +30,7 @@ export interface QuestionRow {
     ocr_text: string;
     notes: string;
     priority: number;
+    notebook_id: number | null;
     created_at: string;
     last_reviewed: string | null;
     next_review_date: string | null;
@@ -40,6 +43,7 @@ export interface Solution {
     id: number;
     question_id: number;
     tier: SolutionTier;
+    language: SolutionLanguage;
     code: string;
     explanation: string;
     time_complexity: string;
@@ -67,4 +71,11 @@ export interface BackupData {
     questions: Question[];
     solutions: Solution[];
     revision_logs: RevisionLog[];
+}
+
+export interface Notebook {
+    id: number;
+    name: string;
+    color: string;
+    created_at: string;
 }

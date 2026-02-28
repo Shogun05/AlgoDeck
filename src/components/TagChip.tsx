@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 
 interface TagChipProps {
     label: string;
@@ -9,6 +10,9 @@ interface TagChipProps {
 }
 
 export const TagChip: React.FC<TagChipProps> = ({ label, color, small }) => {
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
+
     return (
         <View style={[
             styles.chip,
@@ -27,16 +31,19 @@ interface DifficultyBadgeProps {
 }
 
 export const DifficultyBadge: React.FC<DifficultyBadgeProps> = ({ difficulty, small }) => {
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
+
     const getStyles = () => {
         switch (difficulty) {
             case 'Easy':
-                return { bg: theme.colors.difficulty.easyBg, text: theme.colors.difficulty.easy };
+                return { bg: colors.difficulty.easyBg, text: colors.difficulty.easy };
             case 'Medium':
-                return { bg: theme.colors.difficulty.mediumBg, text: theme.colors.difficulty.medium };
+                return { bg: colors.difficulty.mediumBg, text: colors.difficulty.medium };
             case 'Hard':
-                return { bg: theme.colors.difficulty.hardBg, text: theme.colors.difficulty.hard };
+                return { bg: colors.difficulty.hardBg, text: colors.difficulty.hard };
             default:
-                return { bg: 'rgba(139,148,158,0.15)', text: theme.colors.text.secondary };
+                return { bg: 'rgba(139,148,158,0.15)', text: colors.text.secondary };
         }
     };
     const s = getStyles();
@@ -49,23 +56,23 @@ export const DifficultyBadge: React.FC<DifficultyBadgeProps> = ({ difficulty, sm
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     chip: {
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 6,
         marginRight: 6,
         marginBottom: 4,
-        backgroundColor: 'rgba(139,148,158,0.12)',
+        backgroundColor: isDark ? 'rgba(139,148,158,0.12)' : 'rgba(139,148,158,0.08)',
         borderWidth: 1,
-        borderColor: 'rgba(139,148,158,0.15)',
+        borderColor: isDark ? 'rgba(139,148,158,0.15)' : 'rgba(139,148,158,0.12)',
     },
     chipSmall: {
         paddingHorizontal: 6,
         paddingVertical: 2,
     },
     label: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: theme.typography.sizes.xxs,
         fontWeight: theme.typography.weights.medium,
     },

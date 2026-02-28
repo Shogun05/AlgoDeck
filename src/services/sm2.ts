@@ -1,4 +1,5 @@
 import { SM2Result } from '../types';
+import { sm2IntervalService } from './sm2Intervals';
 
 /**
  * SM-2 Spaced Repetition Algorithm
@@ -29,18 +30,36 @@ export const calculateSM2 = (
     let newInterval: number;
     let newEaseFactor: number;
 
+    const customIntervals = sm2IntervalService.getIntervals();
+
     if (quality < 3) {
         // Failed — reset
         newRepetition = 0;
-        newInterval = 1;
+        // Again: use custom interval (in minutes → convert to fractional days for scheduling)
+        if (quality === 0) {
+            // "Again" — schedule in customIntervals.again minutes
+            newInterval = customIntervals.again / (60 * 24); // fraction of a day
+        } else {
+            // "Hard" (quality 2) — schedule in customIntervals.hard minutes
+            newInterval = customIntervals.hard / (60 * 24);
+        }
         newEaseFactor = easeFactor;
     } else {
         // Passed
         newRepetition = repetition + 1;
         if (newRepetition === 1) {
-            newInterval = 1;
+            // First successful review: use custom good/easy
+            if (quality >= 5) {
+                newInterval = customIntervals.easy;
+            } else {
+                newInterval = customIntervals.good;
+            }
         } else if (newRepetition === 2) {
-            newInterval = 6;
+            if (quality >= 5) {
+                newInterval = customIntervals.easy * 2;
+            } else {
+                newInterval = customIntervals.good * 2;
+            }
         } else {
             newInterval = Math.round(interval * easeFactor);
         }
@@ -52,8 +71,13 @@ export const calculateSM2 = (
         newEaseFactor = 1.3;
     }
 
+    // For sub-day intervals, add minutes instead of days
     const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + newInterval);
+    if (newInterval < 1) {
+        nextDate.setMinutes(nextDate.getMinutes() + Math.round(newInterval * 24 * 60));
+    } else {
+        nextDate.setDate(nextDate.getDate() + Math.round(newInterval));
+    }
     const nextReviewDate = nextDate.toISOString().split('T')[0];
 
     return {

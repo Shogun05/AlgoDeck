@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, TextStyle, StyleSheet, View } from 'react-native';
 import theme from '../theme/theme';
+import { useAppTheme } from '../theme/useAppTheme';
 
 interface SyntaxHighlighterProps {
     code: string;
@@ -10,7 +11,7 @@ interface SyntaxHighlighterProps {
 }
 
 // Colors from stitch/flashcard_study_view/code.html
-const COLORS = {
+const DARK_COLORS = {
     keyword: '#c678dd',   // Purple
     function: '#61afef',  // Blue
     string: '#98c379',    // Green
@@ -19,6 +20,17 @@ const COLORS = {
     number: '#d19a66',    // Orange
     variable: '#e06c75',  // Red/Pink (default/identifier)
     plain: '#e0def4',     // Base text color
+};
+
+const LIGHT_COLORS = {
+    keyword: '#7c3aed',   // Purple
+    function: '#2563eb',  // Blue
+    string: '#16a34a',    // Green
+    comment: '#9ca3af',   // Grey italic
+    operator: '#0891b2',  // Cyan
+    number: '#d97706',    // Orange
+    variable: '#dc2626',  // Red/Pink
+    plain: '#1e293b',     // Base text color
 };
 
 type TokenType = 'keyword' | 'function' | 'string' | 'comment' | 'operator' | 'number' | 'plain';
@@ -96,6 +108,8 @@ const tokenize = (code: string, language: string = 'python'): Token[] => {
 
 
 export const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({ code, language, fontSize, fontFamily }) => {
+    const { isDarkMode } = useAppTheme();
+    const COLORS = isDarkMode ? DARK_COLORS : LIGHT_COLORS;
     const tokens = tokenize(code, language);
 
     const baseStyle: TextStyle = {
