@@ -8,6 +8,7 @@ interface SyntaxHighlighterProps {
     language?: string; // 'python', 'java', 'cpp', etc.
     fontSize?: number;
     fontFamily?: string;
+    tabSize?: number; // Number of spaces per tab/indent level (default: 2)
 }
 
 // Colors from stitch/flashcard_study_view/code.html
@@ -41,9 +42,11 @@ interface Token {
 }
 
 // Simple regex-based tokenizer
-const tokenize = (code: string, language: string = 'python'): Token[] => {
+const tokenize = (code: string, language: string = 'python', tabSize: number = 2): Token[] => {
     const tokens: Token[] = [];
-    let remaining = code;
+    // Expand indentation to the desired tab size (code is stored with 2-space indents)
+    const expandedCode = code.replace(/^  /gm, (match) => ' '.repeat(tabSize));
+    let remaining = expandedCode;
 
     // Regex patterns (simplified)
     const patterns = {
@@ -107,10 +110,10 @@ const tokenize = (code: string, language: string = 'python'): Token[] => {
 };
 
 
-export const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({ code, language, fontSize, fontFamily }) => {
+export const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({ code, language, fontSize, fontFamily, tabSize = 2 }) => {
     const { isDarkMode } = useAppTheme();
     const COLORS = isDarkMode ? DARK_COLORS : LIGHT_COLORS;
-    const tokens = tokenize(code, language);
+    const tokens = tokenize(code, language, tabSize);
 
     const baseStyle: TextStyle = {
         fontSize: fontSize || theme.typography.sizes.sm,

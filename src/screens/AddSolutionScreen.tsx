@@ -43,16 +43,10 @@ const emptyTierState = (): TierState => ({
     savedCount: 0,
 });
 
-/** Convert 4-space indentation to 2-space */
+/** Convert any indentation to 2-space (for storage in database) */
 function compress4to2(code: string): string {
-    return code.replace(/^( +)/gm, (match) => {
-        const count4 = Math.floor(match.length / 4);
-        const remainder = match.length % 4;
-        if (count4 > 0) {
-            return '  '.repeat(count4) + ' '.repeat(remainder);
-        }
-        return match;
-    });
+    // Replace each group of 4 spaces with 2 spaces (handles 4-space indentation)
+    return code.replace(/^    /gm, '  ');
 }
 
 export const AddSolutionScreen: React.FC = () => {
@@ -289,7 +283,7 @@ export const AddSolutionScreen: React.FC = () => {
                         <View style={styles.previewContainer}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                 <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} style={styles.previewScroll}>
-                                    <SyntaxHighlighter code={compress4to2(current.code)} language={current.language} />
+                                    <SyntaxHighlighter code={compress4to2(current.code)} language={current.language} tabSize={2} />
                                 </ScrollView>
                             </ScrollView>
                         </View>
