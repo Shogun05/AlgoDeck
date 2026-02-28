@@ -1,39 +1,98 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
-    View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert,
+    View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Alert,
+    Image, Modal,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRevisionStore } from '../store/useRevisionStore';
+import { useQuestionStore } from '../store/useQuestionStore';
+import { useNotebookStore } from '../store/useNotebookStore';
+import { solutionService } from '../db/solutionService';
+import { Solution, SolutionTier } from '../types';
 import { CodeBlock } from '../components/CodeBlock';
 import { DifficultyBadge } from '../components/TagChip';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
+import { hapticService } from '../services/haptics';
+import { sm2IntervalService } from '../services/sm2Intervals';
+import ReactNativeZoomableView from '@openspacelabs/react-native-zoomable-view/src/ReactNativeZoomableView';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const RATINGS = [
-    { label: 'AGAIN', sublabel: '< 1m', ratingKey: 'again', bg: 'rgba(248,81,73,0.12)', text: '#F85149' },
-    { label: 'HARD', sublabel: '2d', ratingKey: 'hard', bg: 'rgba(251,146,60,0.12)', text: '#fb923c' },
-    { label: 'GOOD', sublabel: '4d', ratingKey: 'good', bg: 'rgba(169,133,255,0.15)', text: '#a985ff' },
-    { label: 'EASY', sublabel: '8d', ratingKey: 'easy', bg: 'rgba(45,212,191,0.12)', text: '#2dd4bf' },
-];
 
 export const RevisionScreen: React.FC = () => {
     const navigation = useNavigation<any>();
     const { dueCards, currentIndex, submitRating, nextCard, loadDueCards, loadStats } = useRevisionStore();
+    const { updateQuestion } = useQuestionStore();
+    const { activeNotebookId } = useNotebookStore();
     const [showAnswer, setShowAnswer] = useState(false);
+    const [isStarred, setIsStarred] = useState(false);
+    const [solutions, setSolutions] = useState<Solution[]>([]);
+    const [activeTier, setActiveTier] = useState<SolutionTier>('brute');
+    const [showImageZoom, setShowImageZoom] = useState(false);
+    const [showOcrText, setShowOcrText] = useState(false);
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
-    useFocusEffect(
-        useCallback(() => {
-            loadDueCards();
-        }, [])
-    );
+    const [ratingLabels, setRatingLabels] = useState([
+        { label: 'AGAIN', sublabel: '< 1m', ratingKey: 'again', bg: 'rgba(248,81,73,0.12)', text: '#F85149' },
+        { label: 'HARD', sublabel: '2d', ratingKey: 'hard', bg: 'rgba(251,146,60,0.12)', text: '#fb923c' },
+        { label: 'GOOD', sublabel: '4d', ratingKey: 'good', bg: 'rgba(169,133,255,0.15)', text: '#a985ff' },
+        { label: 'EASY', sublabel: '8d', ratingKey: 'easy', bg: 'rgba(45,212,191,0.12)', text: '#2dd4bf' },
+    ]);
 
     const currentCard = dueCards[currentIndex];
     const totalCards = dueCards.length;
 
+    useEffect(() => {
+        sm2IntervalService.init().then(() => {
+            const iv = sm2IntervalService.getIntervals();
+            setRatingLabels([
+                { label: 'AGAIN', sublabel: sm2IntervalService.formatLabel('again'), ratingKey: 'again', bg: 'rgba(248,81,73,0.12)', text: '#F85149' },
+                { label: 'HARD', sublabel: sm2IntervalService.formatLabel('hard'), ratingKey: 'hard', bg: 'rgba(251,146,60,0.12)', text: '#fb923c' },
+                { label: 'GOOD', sublabel: sm2IntervalService.formatLabel('good'), ratingKey: 'good', bg: 'rgba(169,133,255,0.15)', text: '#a985ff' },
+                { label: 'EASY', sublabel: sm2IntervalService.formatLabel('easy'), ratingKey: 'easy', bg: 'rgba(45,212,191,0.12)', text: '#2dd4bf' },
+            ]);
+        });
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            const nbId = activeNotebookId === 'starred' ? undefined : (activeNotebookId ?? undefined);
+            loadDueCards(nbId);
+        }, [activeNotebookId])
+    );
+
+    // Load solutions & star state when card changes
+    React.useEffect(() => {
+        if (currentCard) {
+            setIsStarred(currentCard.priority === 1);
+            solutionService.getByQuestionId(currentCard.id).then(sols => {
+                setSolutions(sols);
+                // Default to the first tier that has solutions
+                if (sols.length > 0) {
+                    const firstTier = sols[0].tier;
+                    setActiveTier(firstTier);
+                } else {
+                    setActiveTier('brute');
+                }
+            });
+        }
+        setShowAnswer(false);
+        setShowOcrText(false);
+    }, [currentIndex, currentCard?.id]);
+
+    const handleToggleStar = async () => {
+        if (!currentCard) return;
+        hapticService.light();
+        const newPriority = isStarred ? 0 : 1;
+        setIsStarred(!isStarred);
+        await updateQuestion(currentCard.id, { priority: newPriority });
+    };
+
     const handleRating = async (ratingKey: string) => {
         if (!currentCard?.id) return;
+        hapticService.medium();
         await submitRating(currentCard.id, ratingKey);
         setShowAnswer(false);
         if (currentIndex >= totalCards - 1) {
@@ -46,6 +105,13 @@ export const RevisionScreen: React.FC = () => {
         } else {
             nextCard();
         }
+    };
+
+    const tierSolutions = solutions.filter(s => s.tier === activeTier);
+    const TIER_LABELS: Record<SolutionTier, string> = {
+        brute: 'Brute Force',
+        optimized: 'Optimized',
+        best: 'Best',
     };
 
     if (!currentCard) {
@@ -71,11 +137,15 @@ export const RevisionScreen: React.FC = () => {
                     onPress={() => navigation.goBack()}
                     style={styles.closeBtn}
                 >
-                    <Ionicons name="close" size={22} color={theme.colors.text.secondary} />
+                    <Ionicons name="close" size={22} color={colors.text.secondary} />
                 </TouchableOpacity>
                 <Text style={styles.counter}>Card {currentIndex + 1}/{totalCards}</Text>
-                <TouchableOpacity style={styles.starBtn}>
-                    <Ionicons name="star" size={22} color={theme.colors.primary} />
+                <TouchableOpacity style={styles.starBtn} onPress={handleToggleStar}>
+                    <Ionicons
+                        name={isStarred ? 'star' : 'star-outline'}
+                        size={22}
+                        color={isStarred ? '#fbbf24' : colors.text.tertiary}
+                    />
                 </TouchableOpacity>
             </View>
 
@@ -84,9 +154,9 @@ export const RevisionScreen: React.FC = () => {
                 <View style={[
                     styles.titleDot,
                     {
-                        backgroundColor: currentCard.difficulty === 'Easy' ? theme.colors.difficulty.easy
-                            : currentCard.difficulty === 'Medium' ? theme.colors.difficulty.medium
-                                : theme.colors.difficulty.hard
+                        backgroundColor: currentCard.difficulty === 'Easy' ? colors.difficulty.easy
+                            : currentCard.difficulty === 'Medium' ? colors.difficulty.medium
+                                : colors.difficulty.hard
                     }
                 ]} />
                 <Text style={styles.titlePillText} numberOfLines={1}>{currentCard.title}</Text>
@@ -98,31 +168,144 @@ export const RevisionScreen: React.FC = () => {
                     {!showAnswer ? (
                         <TouchableOpacity
                             style={styles.cardFront}
-                            onPress={() => setShowAnswer(true)}
+                            onPress={() => { hapticService.medium(); setShowAnswer(true); }}
                             activeOpacity={0.9}
                         >
+                            {currentCard.screenshot_path ? (
+                                <TouchableOpacity
+                                    activeOpacity={0.85}
+                                    onPress={() => { hapticService.light(); setShowImageZoom(true); }}
+                                    style={styles.cardImageWrap}
+                                >
+                                    <Image
+                                        source={{ uri: currentCard.screenshot_path }}
+                                        style={styles.cardImage}
+                                        resizeMode="contain"
+                                    />
+                                    <View style={styles.cardImageZoomHint}>
+                                        <Ionicons name="expand-outline" size={12} color="#fff" />
+                                    </View>
+                                </TouchableOpacity>
+                            ) : null}
+                            {currentCard.ocr_text ? (
+                                <View style={styles.ocrSection}>
+                                    <TouchableOpacity
+                                        style={styles.ocrToggleBtn}
+                                        onPress={() => setShowOcrText(!showOcrText)}
+                                    >
+                                        <Ionicons name="scan-outline" size={14} color={colors.primary} />
+                                        <Text style={styles.ocrToggleText}>
+                                            {showOcrText ? 'Hide extracted text' : 'View extracted text'}
+                                        </Text>
+                                        <Ionicons name={showOcrText ? 'chevron-up' : 'chevron-down'} size={14} color={colors.primary} />
+                                    </TouchableOpacity>
+                                    {showOcrText && (
+                                        <ScrollView style={styles.ocrScroll} nestedScrollEnabled>
+                                            <Text style={styles.ocrText}>{currentCard.ocr_text}</Text>
+                                        </ScrollView>
+                                    )}
+                                </View>
+                            ) : null}
                             <Text style={styles.questionTitle}>{currentCard.title}</Text>
                             <DifficultyBadge difficulty={currentCard.difficulty} />
                             <View style={styles.tapHint}>
-                                <Ionicons name="eye-outline" size={20} color={theme.colors.text.tertiary} />
+                                <Ionicons name="eye-outline" size={20} color={colors.text.tertiary} />
                                 <Text style={styles.tapHintText}>Tap to reveal solution</Text>
                             </View>
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.cardBack}>
-                            <View style={styles.tabPlaceholder}>
-                                <Text style={styles.tabActiveLabel}>Solution</Text>
-                            </View>
-                            <View style={styles.solutionContent}>
-                                {currentCard.notes ? (
-                                    <View style={styles.explanationSection}>
-                                        <Text style={styles.explanLabel}>💡 LOGIC BREAKDOWN</Text>
-                                        <Text style={styles.explanText}>{currentCard.notes}</Text>
+                            {/* Flip back button */}
+                            <TouchableOpacity
+                                style={styles.flipBackBtn}
+                                onPress={() => { hapticService.medium(); setShowAnswer(false); }}
+                            >
+                                <Ionicons name="arrow-back" size={16} color={colors.primary} />
+                                <Text style={styles.flipBackText}>Back to question</Text>
+                            </TouchableOpacity>
+                            {/* Solution tier tabs */}
+                            {solutions.length > 0 ? (
+                                <>
+                                    <View style={styles.tabBar}>
+                                        {(['brute', 'optimized', 'best'] as SolutionTier[]).map(t => {
+                                            const count = solutions.filter(s => s.tier === t).length;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={t}
+                                                    style={[styles.tabBtn, activeTier === t && styles.tabBtnActive]}
+                                                    onPress={() => { hapticService.selection(); setActiveTier(t); }}
+                                                >
+                                                    <Text style={[styles.tabBtnText, activeTier === t && styles.tabBtnTextActive]}>
+                                                        {TIER_LABELS[t]}
+                                                    </Text>
+                                                    {count > 0 && (
+                                                        <View style={[styles.tabBadge, activeTier === t && styles.tabBadgeActive]}>
+                                                            <Text style={[styles.tabBadgeText, activeTier === t && styles.tabBadgeTextActive]}>{count}</Text>
+                                                        </View>
+                                                    )}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
                                     </View>
-                                ) : (
-                                    <Text style={styles.noSolution}>No notes available for this card</Text>
-                                )}
-                            </View>
+                                    <ScrollView style={styles.solutionContent} showsVerticalScrollIndicator={false}>
+                                        {tierSolutions.length > 0 ? tierSolutions.map((sol, i) => (
+                                            <View key={sol.id} style={styles.solutionBlock}>
+                                                {tierSolutions.length > 1 && (
+                                                    <Text style={styles.solIndex}>Solution {i + 1}</Text>
+                                                )}
+                                                <CodeBlock
+                                                    code={sol.code}
+                                                    language={sol.language || 'python'}
+                                                    timeComplexity={sol.time_complexity}
+                                                    spaceComplexity={sol.space_complexity}
+                                                />
+                                                {sol.explanation ? (
+                                                    <View style={styles.explanationSection}>
+                                                        <Text style={styles.explanLabel}>💡 LOGIC BREAKDOWN</Text>
+                                                        <Text style={styles.explanText}>{sol.explanation}</Text>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        )) : (
+                                            <Text style={styles.noSolution}>No {TIER_LABELS[activeTier]} solution added</Text>
+                                        )}
+                                        {currentCard.notes ? (
+                                            <View style={styles.notesSection}>
+                                                <Text style={styles.explanLabel}>📝 NOTES</Text>
+                                                <Text style={styles.explanText}>{currentCard.notes}</Text>
+                                            </View>
+                                        ) : null}
+                                        {currentCard.ocr_text ? (
+                                            <View style={styles.notesSection}>
+                                                <TouchableOpacity
+                                                    style={styles.ocrToggleBtn}
+                                                    onPress={() => setShowOcrText(!showOcrText)}
+                                                >
+                                                    <Ionicons name="scan-outline" size={14} color={colors.primary} />
+                                                    <Text style={styles.ocrToggleText}>
+                                                        {showOcrText ? 'Hide OCR Text' : '🔍 View OCR Text'}
+                                                    </Text>
+                                                    <Ionicons name={showOcrText ? 'chevron-up' : 'chevron-down'} size={14} color={colors.primary} />
+                                                </TouchableOpacity>
+                                                {showOcrText && (
+                                                    <Text style={styles.ocrText}>{currentCard.ocr_text}</Text>
+                                                )}
+                                            </View>
+                                        ) : null}
+                                    </ScrollView>
+                                </>
+                            ) : (
+                                <ScrollView style={styles.solutionContent}>
+                                    {currentCard.notes ? (
+                                        <View style={styles.explanationSection}>
+                                            <Text style={styles.explanLabel}>📝 NOTES</Text>
+                                            <Text style={styles.explanText}>{currentCard.notes}</Text>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.noSolution}>No solutions or notes added yet</Text>
+                                    )}
+                                </ScrollView>
+                            )}
                         </View>
                     )}
                 </View>
@@ -132,7 +315,7 @@ export const RevisionScreen: React.FC = () => {
             {showAnswer && (
                 <View style={styles.ratingFooter}>
                     <View style={styles.ratingRow}>
-                        {RATINGS.map(r => (
+                        {ratingLabels.map(r => (
                             <TouchableOpacity
                                 key={r.ratingKey}
                                 style={[styles.ratingBtn, { backgroundColor: r.bg }]}
@@ -146,14 +329,46 @@ export const RevisionScreen: React.FC = () => {
                     </View>
                 </View>
             )}
+
+            {/* Image Zoom Modal */}
+            {currentCard.screenshot_path ? (
+                <Modal
+                    visible={showImageZoom}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowImageZoom(false)}
+                >
+                    <View style={styles.zoomOverlay}>
+                        <TouchableOpacity
+                            style={styles.zoomCloseBtn}
+                            onPress={() => setShowImageZoom(false)}
+                        >
+                            <Ionicons name="close" size={28} color="#fff" />
+                        </TouchableOpacity>
+                        <ReactNativeZoomableView
+                            maxZoom={5}
+                            minZoom={1}
+                            initialZoom={1}
+                            bindToBorders
+                            style={{ flex: 1, width: '100%' }}
+                        >
+                            <Image
+                                source={{ uri: currentCard.screenshot_path }}
+                                style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.5 }}
+                                resizeMode="contain"
+                            />
+                        </ReactNativeZoomableView>
+                    </View>
+                </Modal>
+            ) : null}
         </View>
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     screen: {
         flex: 1,
-        backgroundColor: theme.colors.bg.dark,
+        backgroundColor: colors.bg.primary,
     },
     // Header
     header: {
@@ -168,12 +383,12 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     counter: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: 14,
         fontWeight: '600',
     },
@@ -181,7 +396,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -190,7 +405,7 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 8,
@@ -204,7 +419,7 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     titlePillText: {
-        color: theme.colors.text.primary,
+        color: colors.text.primary,
         fontSize: 14,
         fontWeight: '700',
     },
@@ -216,10 +431,10 @@ const styles = StyleSheet.create({
     },
     card: {
         flex: 1,
-        backgroundColor: 'rgba(255,255,255,0.03)',
+        backgroundColor: colors.bg.card,
         borderRadius: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: colors.bg.cardBorder,
         overflow: 'hidden',
         ...theme.shadows.lg,
     },
@@ -230,8 +445,27 @@ const styles = StyleSheet.create({
         padding: 32,
         gap: 20,
     },
+    cardImageWrap: {
+        width: '100%',
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+    },
+    cardImage: {
+        width: '100%',
+        height: 160,
+        borderRadius: 12,
+    },
+    cardImageZoomHint: {
+        position: 'absolute',
+        bottom: 6,
+        right: 6,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 6,
+        padding: 4,
+    },
     questionTitle: {
-        color: '#fff',
+        color: colors.text.heading,
         fontSize: 24,
         fontWeight: '800',
         textAlign: 'center',
@@ -243,45 +477,111 @@ const styles = StyleSheet.create({
         marginTop: 24,
     },
     tapHintText: {
-        color: theme.colors.text.tertiary,
+        color: colors.text.tertiary,
         fontSize: 13,
         fontWeight: '500',
     },
     cardBack: {
         flex: 1,
     },
-    tabPlaceholder: {
-        padding: 16,
+    flipBackBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 16,
+        paddingTop: 10,
+        paddingBottom: 4,
+    },
+    flipBackText: {
+        color: colors.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    tabBar: {
+        flexDirection: 'row',
+        padding: 8,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(169,133,255,0.1)',
-        alignItems: 'center',
+        gap: 4,
     },
-    tabActiveLabel: {
-        color: theme.colors.primary,
-        fontSize: 13,
+    tabBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        borderRadius: 10,
+        gap: 4,
+    },
+    tabBtnActive: {
+        backgroundColor: isDark ? 'rgba(169,133,255,0.12)' : 'rgba(169,133,255,0.08)',
+    },
+    tabBtnText: {
+        color: colors.text.tertiary,
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    tabBtnTextActive: {
+        color: colors.primary,
         fontWeight: '700',
+    },
+    tabBadge: {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+        borderRadius: 8,
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+    },
+    tabBadgeActive: {
+        backgroundColor: 'rgba(169,133,255,0.2)',
+    },
+    tabBadgeText: {
+        color: colors.text.tertiary,
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    tabBadgeTextActive: {
+        color: colors.primary,
     },
     solutionContent: {
         flex: 1,
-        padding: 20,
+        padding: 16,
+    },
+    solutionBlock: {
+        marginBottom: 16,
+    },
+    solIndex: {
+        color: colors.text.secondary,
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 6,
     },
     explanationSection: {
-        gap: 10,
+        gap: 8,
+        marginTop: 8,
+    },
+    notesSection: {
+        gap: 8,
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
     },
     explanLabel: {
-        color: theme.colors.text.primary,
+        color: colors.text.primary,
         fontSize: 14,
         fontWeight: '700',
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     explanText: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: 14,
         lineHeight: 22,
     },
     noSolution: {
-        color: theme.colors.text.tertiary,
+        color: colors.text.tertiary,
         fontSize: 14,
         textAlign: 'center',
         marginTop: 40,
@@ -325,17 +625,17 @@ const styles = StyleSheet.create({
         fontSize: 48,
     },
     emptyTitle: {
-        color: '#fff',
+        color: colors.text.heading,
         fontSize: 22,
         fontWeight: '700',
     },
     emptySubtext: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: 14,
     },
     backBtn: {
         marginTop: 20,
-        backgroundColor: theme.colors.primary,
+        backgroundColor: colors.primary,
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 16,
@@ -344,5 +644,53 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 15,
         fontWeight: '700',
+    },
+    // OCR text
+    ocrSection: {
+        width: '100%',
+    },
+    ocrToggleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'center',
+        gap: 6,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    ocrToggleText: {
+        color: colors.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    ocrScroll: {
+        maxHeight: 150,
+        backgroundColor: isDark ? 'rgba(169,133,255,0.05)' : 'rgba(169,133,255,0.04)',
+        borderRadius: 12,
+        padding: 12,
+        marginTop: 4,
+    },
+    ocrText: {
+        color: colors.text.secondary,
+        fontSize: 12,
+        fontFamily: theme.typography.families.mono,
+        lineHeight: 18,
+    },
+    zoomOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomCloseBtn: {
+        position: 'absolute',
+        top: 56,
+        right: 20,
+        zIndex: 10,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -7,6 +7,7 @@ import Animated, {
     interpolate,
 } from 'react-native-reanimated';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 
 interface FlashCardProps {
     front: React.ReactNode;
@@ -20,6 +21,8 @@ const CARD_WIDTH = SCREEN_WIDTH - 32;
 
 export const FlashCard: React.FC<FlashCardProps> = ({ front, back, isFlipped, onFlip }) => {
     const rotation = useSharedValue(0);
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
     React.useEffect(() => {
         rotation.value = withTiming(isFlipped ? 180 : 0, { duration: 500 });
@@ -57,7 +60,7 @@ export const FlashCard: React.FC<FlashCardProps> = ({ front, back, isFlipped, on
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     wrapper: {
         flex: 1,
         alignItems: 'center',
@@ -69,10 +72,10 @@ const styles = StyleSheet.create({
     },
     card: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: colors.bg.card,
         borderRadius: theme.borderRadius.xxl,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: colors.bg.cardBorder,
         overflow: 'hidden',
         ...theme.shadows.lg,
     },

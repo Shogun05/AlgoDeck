@@ -12,7 +12,7 @@ interface RevisionState {
     streak: number;
     loading: boolean;
 
-    loadDueCards: () => Promise<void>;
+    loadDueCards: (notebookId?: number | null) => Promise<void>;
     submitRating: (questionId: number, rating: string) => Promise<void>;
     loadStats: () => Promise<void>;
     nextCard: () => void;
@@ -26,10 +26,10 @@ export const useRevisionStore = create<RevisionState>((set, get) => ({
     streak: 0,
     loading: false,
 
-    loadDueCards: async () => {
+    loadDueCards: async (notebookId?: number | null) => {
         set({ loading: true });
         try {
-            const dueCards = await questionService.getDueToday();
+            const dueCards = await questionService.getDueToday(notebookId ?? undefined);
             set({ dueCards, dueCount: dueCards.length, currentIndex: 0, loading: false });
         } catch (err) {
             console.error('Failed to load due cards:', err);

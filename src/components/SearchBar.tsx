@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 
 interface SearchBarProps {
     value: string;
@@ -14,34 +15,38 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     onChangeText,
     placeholder = 'Search algorithms, data structures...',
 }) => {
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
+
     return (
         <View style={styles.container}>
-            <Ionicons name="search" size={20} color={theme.colors.primary + '99'} style={styles.icon} />
+            <Ionicons name="search" size={20} color={colors.primary + '99'} style={styles.icon} />
             <TextInput
                 style={styles.input}
                 value={value}
                 onChangeText={onChangeText}
                 placeholder={placeholder}
-                placeholderTextColor={theme.colors.text.tertiary}
+                placeholderTextColor={colors.text.tertiary}
                 returnKeyType="search"
                 autoCorrect={false}
             />
             {value.length > 0 && (
                 <TouchableOpacity onPress={() => onChangeText('')} style={styles.clear}>
-                    <Ionicons name="close-circle" size={18} color={theme.colors.text.tertiary} />
+                    <Ionicons name="close-circle" size={18} color={colors.text.tertiary} />
                 </TouchableOpacity>
             )}
         </View>
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: colors.bg.input,
         borderRadius: theme.borderRadius.lg,
-        borderWidth: 0,
+        borderWidth: isDark ? 0 : 1,
+        borderColor: colors.bg.cardBorder,
         paddingHorizontal: theme.spacing.lg,
         height: 48,
     },
@@ -50,7 +55,7 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        color: theme.colors.text.primary,
+        color: colors.text.primary,
         fontSize: theme.typography.sizes.md,
     },
     clear: {

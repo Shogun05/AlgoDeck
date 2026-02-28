@@ -1,4 +1,4 @@
-import { getDatabase } from './database';
+import { getDatabase, isFTSAvailable } from './database';
 import { Question, QuestionRow, Difficulty } from '../types';
 import { getNow, getToday } from '../utils/helpers';
 
@@ -9,8 +9,15 @@ const rowToQuestion = (row: QuestionRow): Question => ({
 });
 
 export const questionService = {
-    async getAll(): Promise<Question[]> {
+    async getAll(notebookId?: number | null): Promise<Question[]> {
         const db = await getDatabase();
+        if (notebookId !== undefined && notebookId !== null) {
+            const rows = await db.getAllAsync<QuestionRow>(
+                'SELECT * FROM questions WHERE notebook_id = ? ORDER BY created_at DESC',
+                [notebookId]
+            );
+            return rows.map(rowToQuestion);
+        }
         const rows = await db.getAllAsync<QuestionRow>('SELECT * FROM questions ORDER BY created_at DESC');
         return rows.map(rowToQuestion);
     },
@@ -29,13 +36,14 @@ export const questionService = {
         ocr_text: string;
         notes: string;
         priority: number;
+        notebook_id?: number | null;
     }): Promise<number> {
         const db = await getDatabase();
         const now = getNow();
         const result = await db.runAsync(
-            `INSERT INTO questions (title, difficulty, tags, screenshot_path, ocr_text, notes, priority, created_at, interval, ease_factor, repetition)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 2.5, 0)`,
-            [data.title, data.difficulty, JSON.stringify(data.tags), data.screenshot_path, data.ocr_text, data.notes, data.priority, now]
+            `INSERT INTO questions (title, difficulty, tags, screenshot_path, ocr_text, notes, priority, notebook_id, created_at, interval, ease_factor, repetition)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 2.5, 0)`,
+            [data.title, data.difficulty, JSON.stringify(data.tags), data.screenshot_path, data.ocr_text, data.notes, data.priority, data.notebook_id ?? null, now]
         );
         return result.lastInsertRowId;
     },
@@ -48,6 +56,7 @@ export const questionService = {
         ocr_text: string;
         notes: string;
         priority: number;
+        notebook_id: number | null;
         last_reviewed: string;
         next_review_date: string;
         interval: number;
@@ -65,6 +74,7 @@ export const questionService = {
         if (data.ocr_text !== undefined) { fields.push('ocr_text = ?'); values.push(data.ocr_text); }
         if (data.notes !== undefined) { fields.push('notes = ?'); values.push(data.notes); }
         if (data.priority !== undefined) { fields.push('priority = ?'); values.push(data.priority); }
+        if ('notebook_id' in data) { fields.push('notebook_id = ?'); values.push(data.notebook_id); }
         if (data.last_reviewed !== undefined) { fields.push('last_reviewed = ?'); values.push(data.last_reviewed); }
         if (data.next_review_date !== undefined) { fields.push('next_review_date = ?'); values.push(data.next_review_date); }
         if (data.interval !== undefined) { fields.push('interval = ?'); values.push(data.interval); }
@@ -83,13 +93,24 @@ export const questionService = {
 
     async search(query: string, filters?: { difficulty?: Difficulty; tag?: string }): Promise<Question[]> {
         const db = await getDatabase();
+
+        // If we have FTS5 and a text query, use the inverted index
+        if (query && isFTSAvailable()) {
+            try {
+                return await this.searchFTS(query, filters);
+            } catch {
+                // FTS query failed (bad syntax etc.) — fall through to LIKE
+            }
+        }
+
+        // Fallback: LIKE-based search (works without FTS5)
         let sql = 'SELECT * FROM questions WHERE 1=1';
         const params: any[] = [];
 
         if (query) {
-            sql += ' AND (title LIKE ? OR ocr_text LIKE ? OR tags LIKE ?)';
+            sql += ' AND (title LIKE ? OR ocr_text LIKE ? OR notes LIKE ? OR tags LIKE ?)';
             const q = `%${query}%`;
-            params.push(q, q, q);
+            params.push(q, q, q, q);
         }
         if (filters?.difficulty) {
             sql += ' AND difficulty = ?';
@@ -105,9 +126,54 @@ export const questionService = {
         return rows.map(rowToQuestion);
     },
 
-    async getDueToday(): Promise<Question[]> {
+    /**
+     * Full-text search using the FTS5 inverted index.
+     * Searches across title, tags, ocr_text, and notes.
+     */
+    async searchFTS(query: string, filters?: { difficulty?: Difficulty; tag?: string }): Promise<Question[]> {
+        const db = await getDatabase();
+
+        // Sanitize query for FTS5: wrap each word with * for prefix matching
+        const ftsQuery = query
+            .trim()
+            .split(/\s+/)
+            .filter(w => w.length > 0)
+            .map(word => `"${word.replace(/"/g, '')}"*`)
+            .join(' ');
+
+        if (!ftsQuery) return this.getAll();
+
+        let sql = `
+            SELECT q.* FROM questions q
+            JOIN questions_fts fts ON q.id = fts.rowid
+            WHERE questions_fts MATCH ?
+        `;
+        const params: any[] = [ftsQuery];
+
+        if (filters?.difficulty) {
+            sql += ' AND q.difficulty = ?';
+            params.push(filters.difficulty);
+        }
+        if (filters?.tag) {
+            sql += ' AND q.tags LIKE ?';
+            params.push(`%"${filters.tag}"%`);
+        }
+
+        sql += ' ORDER BY rank';
+        const rows = await db.getAllAsync<QuestionRow>(sql, params);
+        return rows.map(rowToQuestion);
+    },
+
+    async getDueToday(notebookId?: number | null): Promise<Question[]> {
         const db = await getDatabase();
         const today = getToday();
+        if (notebookId !== undefined && notebookId !== null) {
+            const rows = await db.getAllAsync<QuestionRow>(
+                'SELECT * FROM questions WHERE notebook_id = ? AND (next_review_date IS NULL OR next_review_date <= ?) ORDER BY next_review_date ASC',
+                [notebookId, today]
+            );
+            return rows.map(rowToQuestion);
+        }
         const rows = await db.getAllAsync<QuestionRow>(
             'SELECT * FROM questions WHERE next_review_date IS NULL OR next_review_date <= ? ORDER BY next_review_date ASC',
             [today]

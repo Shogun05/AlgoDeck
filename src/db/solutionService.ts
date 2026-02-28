@@ -1,5 +1,5 @@
 import { getDatabase } from './database';
-import { Solution, SolutionTier } from '../types';
+import { Solution, SolutionTier, SolutionLanguage } from '../types';
 import { getNow } from '../utils/helpers';
 
 export const solutionService = {
@@ -22,6 +22,7 @@ export const solutionService = {
     async create(data: {
         question_id: number;
         tier: SolutionTier;
+        language: SolutionLanguage;
         code: string;
         explanation: string;
         time_complexity: string;
@@ -29,15 +30,16 @@ export const solutionService = {
     }): Promise<number> {
         const db = await getDatabase();
         const result = await db.runAsync(
-            `INSERT INTO solutions (question_id, tier, code, explanation, time_complexity, space_complexity, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [data.question_id, data.tier, data.code, data.explanation, data.time_complexity, data.space_complexity, getNow()]
+            `INSERT INTO solutions (question_id, tier, language, code, explanation, time_complexity, space_complexity, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [data.question_id, data.tier, data.language, data.code, data.explanation, data.time_complexity, data.space_complexity, getNow()]
         );
         return result.lastInsertRowId;
     },
 
     async update(id: number, data: Partial<{
         tier: SolutionTier;
+        language: SolutionLanguage;
         code: string;
         explanation: string;
         time_complexity: string;
@@ -48,6 +50,7 @@ export const solutionService = {
         const values: any[] = [];
 
         if (data.tier !== undefined) { fields.push('tier = ?'); values.push(data.tier); }
+        if (data.language !== undefined) { fields.push('language = ?'); values.push(data.language); }
         if (data.code !== undefined) { fields.push('code = ?'); values.push(data.code); }
         if (data.explanation !== undefined) { fields.push('explanation = ?'); values.push(data.explanation); }
         if (data.time_complexity !== undefined) { fields.push('time_complexity = ?'); values.push(data.time_complexity); }

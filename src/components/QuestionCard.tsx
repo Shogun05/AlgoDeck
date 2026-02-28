@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Question } from '../types';
 import { DifficultyBadge, TagChip } from './TagChip';
 import { formatRelativeDate } from '../utils/helpers';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 
 interface QuestionCardProps {
     question: Question;
@@ -11,6 +12,9 @@ interface QuestionCardProps {
 }
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress }) => {
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
+
     return (
         <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
             <View style={styles.content}>
@@ -41,14 +45,20 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress })
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     card: {
-        backgroundColor: 'rgba(255,255,255,0.03)',
+        backgroundColor: colors.bg.card,
         borderRadius: theme.borderRadius.lg,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: colors.bg.cardBorder,
         marginBottom: theme.spacing.lg,
-        ...theme.shadows.soft,
+        ...(isDark ? {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 0,
+        } : theme.shadows.soft),
     },
     content: {
         flexDirection: 'row',
@@ -67,7 +77,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     placeholderText: {
-        color: theme.colors.primary,
+        color: colors.primary,
         fontSize: theme.typography.sizes.md,
         fontWeight: theme.typography.weights.bold,
         fontFamily: theme.typography.families.mono,
@@ -78,7 +88,7 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     title: {
-        color: theme.colors.text.primary,
+        color: colors.text.primary,
         fontSize: theme.typography.sizes.md,
         fontWeight: theme.typography.weights.bold,
     },

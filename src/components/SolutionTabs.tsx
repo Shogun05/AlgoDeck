@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Solution, SolutionTier } from '../types';
 import { solutionService } from '../db/solutionService';
 import { CodeBlock } from './CodeBlock';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import theme from '../theme/theme';
+import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
+import { hapticService } from '../services/haptics';
 
 interface SolutionTabsProps {
     questionId: number;
     onAddSolution?: (tier: SolutionTier) => void;
+    onEditSolution?: (solution: Solution) => void;
 }
 
 const TIERS: { key: SolutionTier; label: string }[] = [
@@ -16,17 +21,41 @@ const TIERS: { key: SolutionTier; label: string }[] = [
     { key: 'best', label: 'Best' },
 ];
 
-export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSolution }) => {
+export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSolution, onEditSolution }) => {
     const [activeTier, setActiveTier] = useState<SolutionTier>('brute');
     const [solutions, setSolutions] = useState<Solution[]>([]);
+    const { colors, isDarkMode } = useAppTheme();
+    const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
     useEffect(() => {
         loadSolutions();
     }, [questionId]);
 
+    // Also reload when screen comes back into focus (e.g. after editing)
+    useFocusEffect(
+        useCallback(() => {
+            loadSolutions();
+        }, [questionId])
+    );
+
     const loadSolutions = async () => {
         const all = await solutionService.getByQuestionId(questionId);
         setSolutions(all);
+    };
+
+    const handleDeleteSolution = (sol: Solution) => {
+        hapticService.warning();
+        Alert.alert('Delete Solution', 'Remove this solution?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                    await solutionService.delete(sol.id);
+                    loadSolutions();
+                },
+            },
+        ]);
     };
 
     const tierSolutions = solutions.filter(s => s.tier === activeTier);
@@ -40,7 +69,7 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
                         <TouchableOpacity
                             key={t.key}
                             style={[styles.tab, activeTier === t.key && styles.tabActive]}
-                            onPress={() => setActiveTier(t.key)}
+                            onPress={() => { hapticService.selection(); setActiveTier(t.key); }}
                         >
                             <Text style={[styles.tabText, activeTier === t.key && styles.tabTextActive]}>
                                 {t.label}
@@ -58,7 +87,7 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
                         {onAddSolution && (
                             <TouchableOpacity
                                 style={styles.addBtn}
-                                onPress={() => onAddSolution(activeTier)}
+                                onPress={() => { hapticService.light(); onAddSolution(activeTier); }}
                             >
                                 <Text style={styles.addBtnText}>+ Add Solution</Text>
                             </TouchableOpacity>
@@ -67,12 +96,30 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
                 ) : (
                     tierSolutions.map((sol, i) => (
                         <View key={sol.id} style={styles.solutionCard}>
-                            {tierSolutions.length > 1 && (
-                                <Text style={styles.solIndex}>Solution {i + 1}</Text>
-                            )}
+                            <View style={styles.solHeader}>
+                                {tierSolutions.length > 1 && (
+                                    <Text style={styles.solIndex}>Solution {i + 1}</Text>
+                                )}
+                                <View style={styles.solActions}>
+                                    {onEditSolution && (
+                                        <TouchableOpacity
+                                            style={styles.solActionBtn}
+                                            onPress={() => { hapticService.light(); onEditSolution(sol); }}
+                                        >
+                                            <Ionicons name="pencil" size={14} color={colors.primary} />
+                                        </TouchableOpacity>
+                                    )}
+                                    <TouchableOpacity
+                                        style={styles.solActionBtn}
+                                        onPress={() => handleDeleteSolution(sol)}
+                                    >
+                                        <Ionicons name="trash-outline" size={14} color="#F85149" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
                             <CodeBlock
                                 code={sol.code}
-                                language={undefined}
+                                language={sol.language || 'python'}
                                 timeComplexity={sol.time_complexity}
                                 spaceComplexity={sol.space_complexity}
                             />
@@ -88,7 +135,7 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
                 {tierSolutions.length > 0 && onAddSolution && (
                     <TouchableOpacity
                         style={styles.addBtnOutline}
-                        onPress={() => onAddSolution(activeTier)}
+                        onPress={() => { hapticService.light(); onAddSolution(activeTier); }}
                     >
                         <Text style={styles.addBtnOutlineText}>+ Add Another Solution</Text>
                     </TouchableOpacity>
@@ -98,7 +145,7 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
     },
@@ -110,7 +157,7 @@ const styles = StyleSheet.create({
     },
     tabTrack: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
         borderRadius: theme.borderRadius.lg,
         padding: 4,
     },
@@ -121,16 +168,16 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.md,
     },
     tabActive: {
-        backgroundColor: theme.colors.bg.dark,
+        backgroundColor: colors.bg.primary,
         ...theme.shadows.card,
     },
     tabText: {
         fontSize: theme.typography.sizes.xs,
         fontWeight: theme.typography.weights.semibold,
-        color: theme.colors.text.tertiary,
+        color: colors.text.tertiary,
     },
     tabTextActive: {
-        color: theme.colors.primary,
+        color: colors.primary,
         fontWeight: theme.typography.weights.bold,
     },
     content: {
@@ -143,12 +190,12 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.xxxxl,
     },
     emptyText: {
-        color: theme.colors.text.tertiary,
+        color: colors.text.tertiary,
         fontSize: theme.typography.sizes.md,
         marginBottom: theme.spacing.lg,
     },
     addBtn: {
-        backgroundColor: theme.colors.primary,
+        backgroundColor: colors.primary,
         paddingHorizontal: theme.spacing.xxl,
         paddingVertical: theme.spacing.md,
         borderRadius: theme.borderRadius.md,
@@ -161,8 +208,26 @@ const styles = StyleSheet.create({
     solutionCard: {
         marginBottom: theme.spacing.xl,
     },
+    solHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.sm,
+    },
+    solActions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    solActionBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: 'rgba(169,133,255,0.08)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     solIndex: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: theme.typography.sizes.xs,
         fontWeight: theme.typography.weights.semibold,
         marginBottom: theme.spacing.sm,
@@ -174,14 +239,14 @@ const styles = StyleSheet.create({
         gap: theme.spacing.sm,
     },
     explainLabel: {
-        color: theme.colors.text.primary,
+        color: colors.text.primary,
         fontSize: theme.typography.sizes.sm,
         fontWeight: theme.typography.weights.bold,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     explainText: {
-        color: theme.colors.text.secondary,
+        color: colors.text.secondary,
         fontSize: theme.typography.sizes.sm,
         lineHeight: 22,
     },
@@ -195,7 +260,7 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.xxl,
     },
     addBtnOutlineText: {
-        color: theme.colors.primary,
+        color: colors.primary,
         fontSize: theme.typography.sizes.sm,
         fontWeight: theme.typography.weights.semibold,
     },
