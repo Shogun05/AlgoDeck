@@ -50,7 +50,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                         showsVerticalScrollIndicator={false}
                         style={styles.codeScroll}
                     >
-                        <SyntaxHighlighter code={code} language={language || 'python'} />
+                        <SyntaxHighlighter code={code} language={language || 'python'} tabSize={2} />
                     </ScrollView>
 
                 </ScrollView>
@@ -118,7 +118,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                             nestedScrollEnabled
                             showsHorizontalScrollIndicator
                         >
-                            <SyntaxHighlighter code={code} language={language || 'python'} fontSize={15} />
+                            <SyntaxHighlighter code={code} language={language || 'python'} fontSize={15} tabSize={4} />
                         </ScrollView>
                     </ScrollView>
                 </View>
