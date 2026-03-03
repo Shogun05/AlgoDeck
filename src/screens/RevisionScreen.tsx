@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Alert,
-    Image, Modal,
+    Image, Modal, Platform
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import theme from '../theme/theme';
 import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 import { hapticService } from '../services/haptics';
 import { sm2IntervalService } from '../services/sm2Intervals';
+import { useWebImage } from '../hooks/useWebImage';
 import ReactNativeZoomableView from '@openspacelabs/react-native-zoomable-view/src/ReactNativeZoomableView';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -43,6 +44,8 @@ export const RevisionScreen: React.FC = () => {
 
     const currentCard = dueCards[currentIndex];
     const totalCards = dueCards.length;
+
+    const displayImageUri = useWebImage(currentCard?.screenshot_path);
 
     useEffect(() => {
         sm2IntervalService.init().then(() => {
@@ -171,14 +174,14 @@ export const RevisionScreen: React.FC = () => {
                             onPress={() => { hapticService.medium(); setShowAnswer(true); }}
                             activeOpacity={0.9}
                         >
-                            {currentCard.screenshot_path ? (
+                            {displayImageUri ? (
                                 <TouchableOpacity
                                     activeOpacity={0.85}
                                     onPress={() => { hapticService.light(); setShowImageZoom(true); }}
                                     style={styles.cardImageWrap}
                                 >
                                     <Image
-                                        source={{ uri: currentCard.screenshot_path }}
+                                        source={{ uri: displayImageUri }}
                                         style={styles.cardImage}
                                         resizeMode="contain"
                                     />
@@ -331,7 +334,7 @@ export const RevisionScreen: React.FC = () => {
             )}
 
             {/* Image Zoom Modal */}
-            {currentCard.screenshot_path ? (
+            {displayImageUri ? (
                 <Modal
                     visible={showImageZoom}
                     transparent
@@ -345,19 +348,44 @@ export const RevisionScreen: React.FC = () => {
                         >
                             <Ionicons name="close" size={28} color="#fff" />
                         </TouchableOpacity>
-                        <ReactNativeZoomableView
-                            maxZoom={5}
-                            minZoom={1}
-                            initialZoom={1}
-                            bindToBorders
-                            style={{ flex: 1, width: '100%' }}
-                        >
-                            <Image
-                                source={{ uri: currentCard.screenshot_path }}
-                                style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.5 }}
-                                resizeMode="contain"
-                            />
-                        </ReactNativeZoomableView>
+                        {Platform.OS !== 'web' ? (
+                            <ReactNativeZoomableView
+                                maxZoom={5}
+                                minZoom={1}
+                                initialZoom={1}
+                                bindToBorders
+                                style={{ flex: 1, width: '100%' }}
+                            >
+                                <Image
+                                    source={{ uri: displayImageUri }}
+                                    style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.5 }}
+                                    resizeMode="contain"
+                                />
+                            </ReactNativeZoomableView>
+                        ) : (
+                            <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                                <Image
+                                    source={{ uri: displayImageUri }}
+                                    style={{ width: '100%', height: Dimensions.get('window').height * 0.8 }}
+                                    resizeMode="contain"
+                                />
+                                <TouchableOpacity
+                                    style={{ marginTop: 24, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}
+                                    onPress={() => {
+                                        if (displayImageUri.startsWith('data:image')) {
+                                            const newWindow = window.open();
+                                            if (newWindow) {
+                                                newWindow.document.write(`<iframe src="${displayImageUri}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                            }
+                                        } else {
+                                            window.open(displayImageUri, '_blank');
+                                        }
+                                    }}
+                                >
+                                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Open original image</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 </Modal>
             ) : null}

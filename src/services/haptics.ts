@@ -1,19 +1,41 @@
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const HAPTICS_KEY = 'algodeck_haptics';
 
 let hapticsEnabled = true;
 
+const tryHaptic = (hapticCall: () => void) => {
+    if (!hapticsEnabled || Platform.OS === 'web') return;
+    try {
+        hapticCall();
+    } catch (e) {
+        // Ignore haptics errors quietly
+    }
+};
+
 export const hapticService = {
     async init() {
-        const val = await AsyncStorage.getItem(HAPTICS_KEY);
-        hapticsEnabled = val !== 'false'; // default true
+        if (Platform.OS === 'web') {
+            hapticsEnabled = false;
+            return;
+        }
+        try {
+            const val = await AsyncStorage.getItem(HAPTICS_KEY);
+            hapticsEnabled = val !== 'false'; // default true
+        } catch {
+            hapticsEnabled = true;
+        }
     },
 
     async setEnabled(enabled: boolean) {
         hapticsEnabled = enabled;
-        await AsyncStorage.setItem(HAPTICS_KEY, String(enabled));
+        if (Platform.OS !== 'web') {
+            try {
+                await AsyncStorage.setItem(HAPTICS_KEY, String(enabled));
+            } catch { }
+        }
     },
 
     isEnabled() {
@@ -22,36 +44,36 @@ export const hapticService = {
 
     /** Light tap — buttons, toggles, chips */
     light() {
-        if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        tryHaptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
     },
 
     /** Medium tap — tab switch, card flip, selections */
     medium() {
-        if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        tryHaptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
     },
 
     /** Heavy tap — save, delete, important actions */
     heavy() {
-        if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        tryHaptic(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy));
     },
 
     /** Success — save confirmed, import done */
     success() {
-        if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        tryHaptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
     },
 
     /** Warning — destructive action */
     warning() {
-        if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        tryHaptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
     },
 
     /** Error — validation fail */
     error() {
-        if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        tryHaptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
     },
 
     /** Selection tick — scrolling through options */
     selection() {
-        if (hapticsEnabled) Haptics.selectionAsync();
+        tryHaptic(() => Haptics.selectionAsync());
     },
 };

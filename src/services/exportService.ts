@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 import { questionService } from '../db/questionService';
 import { solutionService } from '../db/solutionService';
 import { revisionService } from '../db/revisionService';
@@ -40,13 +41,28 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         let imageExt = 'jpg';
         if (q.screenshot_path) {
             try {
-                const srcInfo = await FileSystem.getInfoAsync(q.screenshot_path);
-                if (srcInfo.exists) {
-                    imageBase64 = await FileSystem.readAsStringAsync(q.screenshot_path, {
-                        encoding: FileSystem.EncodingType.Base64,
+                if (Platform.OS === 'web') {
+                    const res = await fetch(q.screenshot_path);
+                    const blob = await res.blob();
+                    imageBase64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const result = reader.result as string;
+                            resolve(result.split(',')[1] || '');
+                        };
+                        reader.readAsDataURL(blob);
                     });
                     const parts = q.screenshot_path.split('.');
                     imageExt = parts[parts.length - 1] || 'jpg';
+                } else {
+                    const srcInfo = await FileSystem.getInfoAsync(q.screenshot_path);
+                    if (srcInfo.exists) {
+                        imageBase64 = await FileSystem.readAsStringAsync(q.screenshot_path, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                        const parts = q.screenshot_path.split('.');
+                        imageExt = parts[parts.length - 1] || 'jpg';
+                    }
                 }
             } catch { /* skip missing images */ }
         }

@@ -1,16 +1,17 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
     View, Text, ScrollView, Image, TouchableOpacity, StyleSheet, Alert,
-    Modal, Dimensions, FlatList, TextInput,
+    Modal, Dimensions, FlatList, TextInput, Platform,
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Question, Solution } from '../types';
 import { questionService } from '../db/questionService';
 import { SolutionTabs } from '../components/SolutionTabs';
-import { DifficultyBadge, TagChip } from '../components/TagChip';
+import { TagChip, DifficultyBadge } from '../components/TagChip';
 import { useQuestionStore } from '../store/useQuestionStore';
 import { useNotebookStore } from '../store/useNotebookStore';
+import { useWebImage } from '../hooks/useWebImage';
 import theme from '../theme/theme';
 import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 import { hapticService } from '../services/haptics';
@@ -51,6 +52,8 @@ export const QuestionDetailScreen: React.FC = () => {
         const q = await questionService.getById(questionId);
         setQuestion(q || null);
     };
+
+    const displayImageUri = useWebImage(question?.screenshot_path);
 
     // Tag editing helpers
     const combinedTags = useMemo(() => {
@@ -123,17 +126,25 @@ export const QuestionDetailScreen: React.FC = () => {
 
     const handleDelete = () => {
         hapticService.warning();
-        Alert.alert('Delete Question', 'This action cannot be undone.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    await deleteQuestion(questionId);
+        if (Platform.OS === 'web') {
+            if (window.confirm('Delete Question\n\nThis action cannot be undone.')) {
+                deleteQuestion(questionId).then(() => {
                     navigation.goBack();
+                });
+            }
+        } else {
+            Alert.alert('Delete Question', 'This action cannot be undone.', [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await deleteQuestion(questionId);
+                        navigation.goBack();
+                    },
                 },
-            },
-        ]);
+            ]);
+        }
     };
 
     if (!question) {
@@ -166,14 +177,14 @@ export const QuestionDetailScreen: React.FC = () => {
                 contentContainerStyle={{ paddingBottom: 40 }}
             >
                 {/* Screenshot */}
-                {question.screenshot_path ? (
+                {displayImageUri ? (
                     <View>
                         <TouchableOpacity
                             activeOpacity={0.85}
                             onPress={() => setShowImageZoom(true)}
                         >
                             <Image
-                                source={{ uri: question.screenshot_path }}
+                                source={{ uri: displayImageUri }}
                                 style={styles.screenshot}
                                 resizeMode="contain"
                             />
@@ -199,7 +210,7 @@ export const QuestionDetailScreen: React.FC = () => {
                                     <Text style={styles.ocrText}>{question.ocr_text}</Text>
                                 ) : (
                                     <Text style={styles.ocrEmptyText}>
-                                        No text extracted. OCR (ML Kit) is not available in Expo Go — use a development build to enable it.
+                                        No text extracted.
                                     </Text>
                                 )}
                             </View>
@@ -410,7 +421,7 @@ export const QuestionDetailScreen: React.FC = () => {
             </Modal>
 
             {/* Image Zoom Modal */}
-            {question.screenshot_path ? (
+            {displayImageUri ? (
                 <Modal
                     visible={showImageZoom}
                     transparent
@@ -424,19 +435,44 @@ export const QuestionDetailScreen: React.FC = () => {
                         >
                             <Ionicons name="close" size={28} color="#fff" />
                         </TouchableOpacity>
-                        <ReactNativeZoomableView
-                            maxZoom={5}
-                            minZoom={1}
-                            initialZoom={1}
-                            bindToBorders
-                            style={{ flex: 1, width: '100%' }}
-                        >
-                            <Image
-                                source={{ uri: question.screenshot_path }}
-                                style={styles.zoomImage}
-                                resizeMode="contain"
-                            />
-                        </ReactNativeZoomableView>
+                        {Platform.OS !== 'web' ? (
+                            <ReactNativeZoomableView
+                                maxZoom={5}
+                                minZoom={1}
+                                initialZoom={1}
+                                bindToBorders
+                                style={{ flex: 1, width: '100%' }}
+                            >
+                                <Image
+                                    source={{ uri: displayImageUri }}
+                                    style={styles.zoomImage}
+                                    resizeMode="contain"
+                                />
+                            </ReactNativeZoomableView>
+                        ) : (
+                            <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                                <Image
+                                    source={{ uri: displayImageUri }}
+                                    style={[styles.zoomImage, { width: '100%', height: SCREEN_H * 0.8 }]}
+                                    resizeMode="contain"
+                                />
+                                <TouchableOpacity
+                                    style={{ marginTop: 24, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}
+                                    onPress={() => {
+                                        if (displayImageUri.startsWith('data:image')) {
+                                            const newWindow = window.open();
+                                            if (newWindow) {
+                                                newWindow.document.write(`<iframe src="${displayImageUri}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                            }
+                                        } else {
+                                            window.open(displayImageUri, '_blank');
+                                        }
+                                    }}
+                                >
+                                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Open original image</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 </Modal>
             ) : null}

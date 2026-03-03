@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import {
     View, Text, TextInput, ScrollView, TouchableOpacity,
     StyleSheet, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
+    Modal, TouchableWithoutFeedback,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,12 +26,25 @@ const LANGUAGES: { key: SolutionLanguage; label: string; icon: string }[] = [
     { key: 'java', label: 'Java', icon: '☕' },
 ];
 
+const PRESET_COMPLEXITIES = [
+    'O(1)',
+    'O(log n)',
+    'O(n)',
+    'O(n log n)',
+    'O(n²)',
+    'O(n³)',
+    'O(2ⁿ)',
+    'O(n!)'
+];
+
 interface TierState {
     language: SolutionLanguage;
     code: string;
     explanation: string;
     timeComplexity: string;
     spaceComplexity: string;
+    timeMode: 'dropdown' | 'custom';
+    spaceMode: 'dropdown' | 'custom';
     savedCount: number;
 }
 
@@ -40,6 +54,8 @@ const emptyTierState = (): TierState => ({
     explanation: '',
     timeComplexity: '',
     spaceComplexity: '',
+    timeMode: 'dropdown',
+    spaceMode: 'dropdown',
     savedCount: 0,
 });
 
@@ -76,6 +92,8 @@ export const AddSolutionScreen: React.FC = () => {
                 explanation: editSolution.explanation || '',
                 timeComplexity: editSolution.time_complexity || '',
                 spaceComplexity: editSolution.space_complexity || '',
+                timeMode: (editSolution.time_complexity && !PRESET_COMPLEXITIES.includes(editSolution.time_complexity)) ? 'custom' : 'dropdown',
+                spaceMode: (editSolution.space_complexity && !PRESET_COMPLEXITIES.includes(editSolution.space_complexity)) ? 'custom' : 'dropdown',
                 savedCount: 0,
             };
         }
@@ -89,6 +107,54 @@ export const AddSolutionScreen: React.FC = () => {
             ...prev,
             [tier]: { ...prev[tier], [field]: value },
         }));
+    };
+
+    const [complexityPicker, setComplexityPicker] = useState<{ visible: boolean; field: 'timeComplexity' | 'spaceComplexity' | null }>({ visible: false, field: null });
+
+    const renderComplexityField = (field: 'timeComplexity' | 'spaceComplexity', label: string, placeholder: string) => {
+        const modeField = field === 'timeComplexity' ? 'timeMode' : 'spaceMode';
+        const mode = current[modeField];
+        const val = current[field];
+
+        if (mode === 'custom') {
+            return (
+                <View style={[styles.field, { flex: 1 }]}>
+                    <Text style={styles.label}>{label}</Text>
+                    <View style={styles.customInputRow}>
+                        <TextInput
+                            style={[styles.input, styles.customInputBox]}
+                            value={val}
+                            onChangeText={v => updateField(field, v)}
+                            placeholder={placeholder}
+                            placeholderTextColor={colors.text.tertiary}
+                            autoCapitalize="none"
+                        />
+                        <TouchableOpacity
+                            style={styles.revertBtn}
+                            onPress={() => { hapticService.light(); updateField(modeField, 'dropdown'); }}
+                        >
+                            <Ionicons name="list" size={18} color={colors.text.tertiary} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            );
+        }
+
+        return (
+            <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>{label}</Text>
+                <TouchableOpacity
+                    style={styles.dropdownTrigger}
+                    onPress={() => { hapticService.light(); setComplexityPicker({ visible: true, field }); }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={val ? styles.dropdownValue : styles.dropdownPlaceholder} numberOfLines={1}>
+                        {val || placeholder}
+                    </Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.text.tertiary} />
+                </TouchableOpacity>
+            </View>
+        );
     };
 
     const handleCodeChange = (text: string) => {
@@ -320,28 +386,8 @@ export const AddSolutionScreen: React.FC = () => {
 
                 {/* Complexity Row */}
                 <View style={styles.complexityRow}>
-                    <View style={[styles.field, { flex: 1 }]}>
-                        <Text style={styles.label}>Time Complexity</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={current.timeComplexity}
-                            onChangeText={v => updateField('timeComplexity', v)}
-                            placeholder="O(n)"
-                            placeholderTextColor={colors.text.tertiary}
-                            autoCapitalize="none"
-                        />
-                    </View>
-                    <View style={[styles.field, { flex: 1 }]}>
-                        <Text style={styles.label}>Space Complexity</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={current.spaceComplexity}
-                            onChangeText={v => updateField('spaceComplexity', v)}
-                            placeholder="O(1)"
-                            placeholderTextColor={colors.text.tertiary}
-                            autoCapitalize="none"
-                        />
-                    </View>
+                    {renderComplexityField('timeComplexity', 'Time Complexity', 'O(n)')}
+                    {renderComplexityField('spaceComplexity', 'Space Complexity', 'O(1)')}
                 </View>
             </ScrollView>
 
@@ -365,6 +411,62 @@ export const AddSolutionScreen: React.FC = () => {
                     )}
                 </TouchableOpacity>
             </View>
+            {/* Complexity Picker Modal */}
+            <Modal
+                visible={complexityPicker.visible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setComplexityPicker({ visible: false, field: null })}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlayCenter}
+                    activeOpacity={1}
+                    onPress={() => setComplexityPicker({ visible: false, field: null })}
+                >
+                    <TouchableOpacity activeOpacity={1} onPress={() => { }} style={styles.centerModalContent}>
+                        <Text style={styles.centerModalTitle}>
+                            Select {complexityPicker.field === 'timeComplexity' ? 'Time' : 'Space'} Complexity
+                        </Text>
+                        <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
+                            {PRESET_COMPLEXITIES.map(comp => (
+                                <TouchableOpacity
+                                    key={comp}
+                                    style={styles.complexityOptionRow}
+                                    onPress={() => {
+                                        hapticService.selection();
+                                        if (complexityPicker.field) {
+                                            updateField(complexityPicker.field, comp);
+                                        }
+                                        setComplexityPicker({ visible: false, field: null });
+                                    }}
+                                >
+                                    <View style={styles.complexityRadio}>
+                                        {complexityPicker.field && current[complexityPicker.field] === comp && (
+                                            <View style={styles.complexityRadioInner} />
+                                        )}
+                                    </View>
+                                    <Text style={styles.complexityOptionText}>{comp}</Text>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                                style={styles.complexityOptionRow}
+                                onPress={() => {
+                                    hapticService.selection();
+                                    if (complexityPicker.field) {
+                                        const modeField = complexityPicker.field === 'timeComplexity' ? 'timeMode' : 'spaceMode';
+                                        updateField(modeField, 'custom');
+                                        updateField(complexityPicker.field, '');
+                                    }
+                                    setComplexityPicker({ visible: false, field: null });
+                                }}
+                            >
+                                <Ionicons name="create-outline" size={20} color={colors.text.secondary} style={{ marginRight: 8, marginLeft: -2 }} />
+                                <Text style={styles.complexityOptionText}>Custom...</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
         </KeyboardAvoidingView>
     );
 };
@@ -600,6 +702,100 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
     complexityRow: {
         flexDirection: 'row',
         gap: 12,
+    },
+    dropdownTrigger: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.bg.input,
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        height: 48,
+        borderWidth: isDark ? 0 : 1,
+        borderColor: colors.bg.cardBorder,
+        justifyContent: 'space-between',
+    },
+    dropdownValue: {
+        flex: 1,
+        color: colors.text.primary,
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    dropdownPlaceholder: {
+        flex: 1,
+        color: colors.text.tertiary,
+        fontSize: 14,
+    },
+    customInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    customInputBox: {
+        flex: 1,
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
+    },
+    revertBtn: {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+        height: 48, // approx to match input
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: isDark ? 0 : 1,
+        borderLeftWidth: 0,
+        borderColor: colors.bg.cardBorder,
+    },
+    // Center Modal
+    centerModalContent: {
+        backgroundColor: colors.bg.card,
+        borderRadius: 16,
+        marginHorizontal: 30,
+        padding: 24,
+        width: '85%',
+        alignSelf: 'center',
+        ...theme.shadows.card,
+        maxHeight: '90%',
+    },
+    modalOverlayCenter: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+    },
+    centerModalTitle: {
+        color: colors.text.heading,
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    complexityOptionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+    },
+    complexityRadio: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 2,
+        borderColor: colors.text.tertiary,
+        marginRight: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    complexityRadioInner: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: colors.primary,
+    },
+    complexityOptionText: {
+        color: colors.text.primary,
+        fontSize: 15,
+        fontWeight: '500',
     },
     // Bottom
     bottomAction: {

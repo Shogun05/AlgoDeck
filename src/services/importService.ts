@@ -1,3 +1,4 @@
+import { Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getDatabase, rebuildFTS } from '../db/database';
@@ -64,10 +65,40 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
 
         const db = await getDatabase();
 
-        // Clear existing data
-        await db.execAsync('DELETE FROM revision_logs');
-        await db.execAsync('DELETE FROM solutions');
-        await db.execAsync('DELETE FROM questions');
+        // Check for collisions
+        const existingRows = await db.getAllAsync<{ id: number; title: string }>('SELECT id, title FROM questions');
+        const existingTitles = new Map<string, number>();
+        for (const r of existingRows) {
+            existingTitles.set(r.title.toLowerCase().trim(), r.id);
+        }
+
+        let collisionCount = 0;
+        for (const q of data.questions) {
+            if (existingTitles.has(q.title.toLowerCase().trim())) {
+                collisionCount++;
+            }
+        }
+
+        let policy: 'keep' | 'skip' | 'overwrite' = 'keep';
+        if (collisionCount > 0) {
+            if (Platform.OS === 'web') {
+                const ans = window.prompt(`Found ${collisionCount} duplicates.\nType 'skip' to ignore incoming,\n'overwrite' to replace existing,\nOr 'keep' to keep both (default):`, 'keep');
+                if (ans === 'skip' || ans === 'overwrite') policy = ans;
+            } else {
+                policy = await new Promise<'keep' | 'skip' | 'overwrite'>((resolve) => {
+                    Alert.alert(
+                        'Import Collisions Found',
+                        `Found ${collisionCount} questions with duplicate titles. How would you like to handle them?`,
+                        [
+                            { text: 'Keep Both', onPress: () => resolve('keep') },
+                            { text: 'Skip Incoming', onPress: () => resolve('skip') },
+                            { text: 'Overwrite Existing', style: 'destructive', onPress: () => resolve('overwrite') }
+                        ],
+                        { cancelable: false }
+                    );
+                });
+            }
+        }
 
         // Restore notebooks if v3
         const notebookIdMap = new Map<number, number>(); // old ID → new ID
@@ -91,8 +122,26 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             }
         }
 
+        const questionIdMap = new Map<number, number>(); // old q.id -> new q.id
+
         // Insert questions
         for (const q of data.questions) {
+            const normalizedTitle = q.title.toLowerCase().trim();
+            if (existingTitles.has(normalizedTitle)) {
+                if (policy === 'skip') {
+                    // Skip inserting this question entirely
+                    continue;
+                } else if (policy === 'overwrite') {
+                    // Delete the existing question. PRAGMA foreign_keys = ON handles cascading logs and solutions!
+                    const oldId = existingTitles.get(normalizedTitle);
+                    if (oldId) {
+                        await db.runAsync('DELETE FROM questions WHERE id = ?', [oldId]);
+                        // Remove from map to prevent double-deleting on edge case duplicates in incoming payload
+                        existingTitles.delete(normalizedTitle);
+                    }
+                }
+            }
+
             // Remap notebook_id if available
             let notebookId = null;
             if (q.notebook_id && notebookIdMap.has(q.notebook_id)) {
@@ -100,11 +149,11 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             } else if (q.notebook_id && !isV3) {
                 notebookId = q.notebook_id; // Preserve raw ID for v2
             }
-            await db.runAsync(
-                `INSERT INTO questions (id, title, difficulty, tags, screenshot_path, ocr_text, notes, priority, notebook_id, created_at, last_reviewed, next_review_date, interval, ease_factor, repetition)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            const res = await db.runAsync(
+                `INSERT INTO questions (title, difficulty, tags, screenshot_path, ocr_text, notes, priority, notebook_id, created_at, last_reviewed, next_review_date, interval, ease_factor, repetition)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
-                    q.id, q.title, q.difficulty,
+                    q.title, q.difficulty,
                     Array.isArray(q.tags) ? JSON.stringify(q.tags) : q.tags,
                     q.screenshot_path, q.ocr_text, q.notes,
                     q.priority || 0,
@@ -114,23 +163,28 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
                     q.interval || 0, q.ease_factor || 2.5, q.repetition || 0,
                 ]
             );
+            questionIdMap.set(q.id, res.lastInsertRowId);
         }
 
         // Insert solutions
         for (const s of data.solutions) {
+            const newQId = questionIdMap.get(s.question_id);
+            if (!newQId) continue;
             await db.runAsync(
-                `INSERT INTO solutions (id, question_id, tier, language, code, explanation, time_complexity, space_complexity, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [s.id, s.question_id, s.tier, (s as any).language || 'python', s.code, s.explanation, s.time_complexity, s.space_complexity, s.created_at || getNow()]
+                `INSERT INTO solutions (question_id, tier, language, code, explanation, time_complexity, space_complexity, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [newQId, s.tier, (s as any).language || 'python', s.code, s.explanation, s.time_complexity, s.space_complexity, s.created_at || getNow()]
             );
         }
 
         // Insert revision logs
         for (const r of data.revision_logs) {
+            const newQId = questionIdMap.get(r.question_id);
+            if (!newQId) continue;
             await db.runAsync(
-                `INSERT INTO revision_logs (id, question_id, rating, timestamp)
-         VALUES (?, ?, ?, ?)`,
-                [r.id, r.question_id, r.rating, r.timestamp || getNow()]
+                `INSERT INTO revision_logs (question_id, rating, timestamp)
+                 VALUES (?, ?, ?)`,
+                [newQId, r.rating, r.timestamp || getNow()]
             );
         }
 

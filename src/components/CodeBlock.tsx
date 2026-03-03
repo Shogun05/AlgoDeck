@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, StatusBar, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, StatusBar, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import theme from '../theme/theme';
@@ -20,16 +20,16 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
 
     const openFullscreen = useCallback(async () => {
         setFullscreen(true);
-        try {
-            await ScreenOrientation.unlockAsync();
-        } catch {}
+        if (Platform.OS !== 'web') {
+            try { await ScreenOrientation.unlockAsync(); } catch { }
+        }
     }, []);
 
     const closeFullscreen = useCallback(async () => {
         setFullscreen(false);
-        try {
-            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        } catch {}
+        if (Platform.OS !== 'web') {
+            try { await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); } catch { }
+        }
     }, []);
 
     if (!code) return null;
@@ -61,16 +61,16 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                         <Text style={styles.language}>{language.toUpperCase()}</Text>
                     )}
                     <View style={styles.complexityRow}>
-                        {timeComplexity && (
+                        {timeComplexity ? (
                             <View style={styles.timeBadge}>
                                 <Text style={styles.timeText}>{timeComplexity} time</Text>
                             </View>
-                        )}
-                        {spaceComplexity && (
+                        ) : null}
+                        {spaceComplexity ? (
                             <View style={styles.spaceBadge}>
                                 <Text style={styles.spaceText}>{spaceComplexity} space</Text>
                             </View>
-                        )}
+                        ) : null}
                     </View>
                 </View>
             )}
@@ -91,16 +91,16 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                                 <Text style={styles.fsLang}>{language.toUpperCase()}</Text>
                             )}
                             <View style={styles.fsComplexityRow}>
-                                {timeComplexity && (
+                                {timeComplexity ? (
                                     <View style={styles.timeBadge}>
                                         <Text style={styles.timeText}>{timeComplexity}</Text>
                                     </View>
-                                )}
-                                {spaceComplexity && (
+                                ) : null}
+                                {spaceComplexity ? (
                                     <View style={styles.spaceBadge}>
                                         <Text style={styles.spaceText}>{spaceComplexity}</Text>
                                     </View>
-                                )}
+                                ) : null}
                             </View>
                         </View>
                         <TouchableOpacity style={styles.fsCloseBtn} onPress={closeFullscreen}>

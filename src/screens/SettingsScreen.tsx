@@ -5,7 +5,9 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+const DateTimePicker = Platform.OS !== 'web'
+    ? require('@react-native-community/datetimepicker').default
+    : () => null;
 import { exportZip, shareFile } from '../services/exportService';
 import { importBackup } from '../services/importService';
 import { notificationService } from '../services/notificationService';
@@ -207,45 +209,49 @@ export const SettingsScreen: React.FC = () => {
                             thumbColor="#fff"
                         />
                     </View>
-                    <View style={styles.separator} />
-                    {/* Daily Reminder */}
-                    <View style={styles.settingRow}>
-                        <View style={styles.settingLeft}>
-                            <View style={[styles.settingIcon, { backgroundColor: 'rgba(251,146,60,0.15)' }]}>
-                                <Ionicons name="notifications" size={18} color="#fb923c" />
-                            </View>
-                            <View>
-                                <Text style={styles.settingLabel}>Daily Reminder</Text>
-                                <Text style={styles.settingSublabel}>
-                                    {reminderEnabled ? formatTime(reminderHour, reminderMinute) : 'Off'}
-                                </Text>
-                            </View>
-                        </View>
-                        <Switch
-                            value={reminderEnabled}
-                            onValueChange={handleToggleReminder}
-                            trackColor={{ false: '#374151', true: colors.primary }}
-                            thumbColor="#fff"
-                        />
-                    </View>
-                    {reminderEnabled && (
+                    {Platform.OS !== 'web' && (
                         <>
-                            <View style={styles.separator} />
-                            <TouchableOpacity
-                                style={styles.settingRow}
-                                onPress={() => { hapticService.light(); setShowTimePicker(true); }}
-                            >
-                                <View style={styles.settingLeft}>
-                                    <View style={[styles.settingIcon, { backgroundColor: 'rgba(169,133,255,0.15)' }]}>
-                                        <Ionicons name="time-outline" size={18} color={colors.primary} />
+                        <View style={styles.separator} />
+                        {/* Daily Reminder */}
+                        <View style={styles.settingRow}>
+                            <View style={styles.settingLeft}>
+                                <View style={[styles.settingIcon, { backgroundColor: 'rgba(251,146,60,0.15)' }]}>
+                                    <Ionicons name="notifications" size={18} color="#fb923c" />
+                                </View>
+                                <View>
+                                    <Text style={styles.settingLabel}>Daily Reminder</Text>
+                                    <Text style={styles.settingSublabel}>
+                                        {reminderEnabled ? formatTime(reminderHour, reminderMinute) : 'Off'}
+                                    </Text>
+                                </View>
+                            </View>
+                            <Switch
+                                value={reminderEnabled}
+                                onValueChange={handleToggleReminder}
+                                trackColor={{ false: '#374151', true: colors.primary }}
+                                thumbColor="#fff"
+                            />
+                        </View>
+                        {reminderEnabled && (
+                            <>
+                                <View style={styles.separator} />
+                                <TouchableOpacity
+                                    style={styles.settingRow}
+                                    onPress={() => { hapticService.light(); setShowTimePicker(true); }}
+                                >
+                                    <View style={styles.settingLeft}>
+                                        <View style={[styles.settingIcon, { backgroundColor: 'rgba(169,133,255,0.15)' }]}>
+                                            <Ionicons name="time-outline" size={18} color={colors.primary} />
+                                        </View>
+                                        <Text style={styles.settingLabel}>Reminder Time</Text>
                                     </View>
-                                    <Text style={styles.settingLabel}>Reminder Time</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                    <Text style={styles.settingSublabel}>{formatTime(reminderHour, reminderMinute)}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={colors.text.tertiary} />
-                                </View>
-                            </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Text style={styles.settingSublabel}>{formatTime(reminderHour, reminderMinute)}</Text>
+                                        <Ionicons name="chevron-forward" size={18} color={colors.text.tertiary} />
+                                    </View>
+                                </TouchableOpacity>
+                            </>
+                        )}
                         </>
                     )}
                 </View>
@@ -447,7 +453,7 @@ export const SettingsScreen: React.FC = () => {
             </Modal>
 
             {/* Native Time Picker */}
-            {showTimePicker && (
+            {Platform.OS !== 'web' && showTimePicker && (
                 <DateTimePicker
                     value={(() => {
                         const d = new Date();

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, StatusBar } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, StatusBar, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { getDatabase } from './src/db/database';
@@ -21,14 +21,21 @@ export default function App() {
   useEffect(() => {
     async function initDB() {
       try {
-        await getDatabase();
+        try {
+          await getDatabase();
+        } catch (dbError: any) {
+          // database.web.ts explicitly throws this error on the web platform
+          if (dbError.message !== '[web] SQLite not used on web') {
+            throw dbError;
+          }
+        }
         await hapticService.init();
         await sm2IntervalService.init();
         await useNotebookStore.getState().loadNotebooks();
         await useNotebookStore.getState().initActiveNotebook();
         setDbReady(true);
       } catch (e) {
-        console.error('Failed to initialize database:', e);
+        console.error('Failed to initialize database/app:', e);
       }
     }
     initDB();
@@ -47,10 +54,14 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle={barStyle} backgroundColor={bgColor} />
-      <AppNavigator />
-    </GestureHandlerRootView>
+    <View style={styles.rootContainer}>
+      <View style={[styles.appContainer, { backgroundColor: bgColor }]}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <StatusBar barStyle={barStyle} backgroundColor={bgColor} />
+          <AppNavigator />
+        </GestureHandlerRootView>
+      </View>
+    </View>
   );
 }
 
@@ -60,5 +71,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.dark,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#0a0a0a', // Use dark default outer background
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appContainer: {
+    flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 450 : undefined,
+    height: '100%',
+    overflow: 'hidden',
+    boxShadow: Platform.OS === 'web' ? '0px 0px 30px rgba(0, 0, 0, 0.5)' : undefined,
   },
 });

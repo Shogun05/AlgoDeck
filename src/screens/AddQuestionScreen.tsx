@@ -2,11 +2,12 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
     View, Text, TextInput, ScrollView, TouchableOpacity, Image,
     StyleSheet, Alert, KeyboardAvoidingView, Platform, ActivityIndicator,
-    Modal, FlatList,
+    Modal, FlatList, TouchableWithoutFeedback
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useQuestionStore } from '../store/useQuestionStore';
 import { useNotebookStore } from '../store/useNotebookStore';
 import { performOCR } from '../services/ocr';
@@ -42,9 +43,14 @@ export const AddQuestionScreen: React.FC = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.8,
+            base64: Platform.OS === 'web',
         });
         if (!result.canceled && result.assets[0]) {
-            const uri = result.assets[0].uri;
+            let uri = result.assets[0].uri;
+            if (Platform.OS === 'web' && result.assets[0].base64) {
+                // On web, use raw base64 data to persist cleanly into localStorage
+                uri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+            }
             setImagePath(uri);
             // Run OCR
             setOcrLoading(true);
@@ -105,12 +111,31 @@ export const AddQuestionScreen: React.FC = () => {
         setLoading(true);
         try {
             hapticService.success();
+            let finalImagePath = imagePath || '';
+
+            if (finalImagePath && Platform.OS !== 'web' && !finalImagePath.startsWith(FileSystem.documentDirectory!)) {
+                const IMAGES_DIR = `${FileSystem.documentDirectory}screenshots/`;
+                const info = await FileSystem.getInfoAsync(IMAGES_DIR);
+                if (!info.exists) {
+                    await FileSystem.makeDirectoryAsync(IMAGES_DIR, { intermediates: true });
+                }
+                const ext = finalImagePath.split('.').pop() || 'jpg';
+                const filename = `img_${Date.now()}.${ext}`;
+                const newPath = IMAGES_DIR + filename;
+
+                await FileSystem.copyAsync({
+                    from: finalImagePath,
+                    to: newPath
+                });
+                finalImagePath = newPath;
+            }
+
             const newId = await addQuestion({
                 title: title.trim(),
                 difficulty,
                 tags,
                 notes: notes.trim(),
-                screenshot_path: imagePath || '',
+                screenshot_path: finalImagePath,
                 ocr_text: ocrText || '',
                 notebook_id: selectedNotebookId,
             });
@@ -152,17 +177,31 @@ export const AddQuestionScreen: React.FC = () => {
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 120 }}
             >
-                {/* Upload Zone */}
-                <TouchableOpacity style={styles.uploadZone} onPress={pickImage} activeOpacity={0.7}>
+                {/* Image Upload Area */}
+                <View style={styles.uploadContainer}>
                     {imagePath ? (
-                        <Image source={{ uri: imagePath }} style={styles.uploadedImage} resizeMode="cover" />
-                    ) : (
-                        <View style={styles.uploadPlaceholder}>
-                            <View style={styles.cameraCircle}>
-                                <Ionicons name="camera" size={28} color={colors.primary} />
-                            </View>
-                            <Text style={styles.uploadText}>Tap to upload screenshot</Text>
+                        <View style={{ width: '100%', height: '100%' }}>
+                            <TouchableOpacity style={{ flex: 1 }} onPress={pickImage} activeOpacity={0.8}>
+                                <Image source={{ uri: imagePath }} style={styles.uploadedImage} resizeMode="cover" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.deleteImageBtn}
+                                onPress={() => {
+                                    hapticService.light();
+                                    setImagePath(null);
+                                }}
+                            >
+                                <Ionicons name="close" size={20} color="#fff" />
+                            </TouchableOpacity>
                         </View>
+                    ) : (
+                        <TouchableOpacity style={styles.uploadZoneInner} onPress={pickImage} activeOpacity={0.7}>
+                            <View style={styles.uploadIconCircle}>
+                                <Ionicons name="image" size={24} color={colors.primary} />
+                            </View>
+                            <Text style={styles.uploadText}>Tap to upload image</Text>
+                            <Text style={styles.uploadSubtext}>Or take a photo</Text>
+                        </TouchableOpacity>
                     )}
                     {ocrLoading && (
                         <View style={styles.ocrOverlay}>
@@ -170,7 +209,7 @@ export const AddQuestionScreen: React.FC = () => {
                             <Text style={styles.ocrOverlayText}>Running OCR...</Text>
                         </View>
                     )}
-                </TouchableOpacity>
+                </View>
 
                 {/* Title Input */}
                 <View style={styles.field}>
@@ -327,7 +366,7 @@ export const AddQuestionScreen: React.FC = () => {
                     activeOpacity={1}
                     onPress={() => { setShowTagPicker(false); setTagSearch(''); }}
                 >
-                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                    <TouchableOpacity activeOpacity={1} onPress={() => { }} style={styles.modalContent}>
                         {/* Modal Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Select Tags</Text>
@@ -405,7 +444,7 @@ export const AddQuestionScreen: React.FC = () => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </View>
+                    </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
         </KeyboardAvoidingView>
@@ -440,7 +479,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         paddingHorizontal: 20,
     },
     // Upload
-    uploadZone: {
+    uploadContainer: {
         width: '100%',
         aspectRatio: 4 / 3,
         borderRadius: 20,
@@ -454,11 +493,13 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         justifyContent: 'center',
         alignItems: 'center',
     },
-    uploadPlaceholder: {
+    uploadZoneInner: {
+        flex: 1,
         alignItems: 'center',
-        gap: 12,
+        justifyContent: 'center',
+        width: '100%',
     },
-    cameraCircle: {
+    uploadIconCircle: {
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -471,10 +512,28 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         color: 'rgba(169,133,255,0.7)',
         fontSize: 14,
         fontWeight: '500',
+        marginTop: 12,
+    },
+    uploadSubtext: {
+        color: colors.text.tertiary,
+        fontSize: 12,
+        marginTop: 4,
     },
     uploadedImage: {
         width: '100%',
         height: '100%',
+        borderRadius: 16,
+    },
+    deleteImageBtn: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     ocrOverlay: {
         ...StyleSheet.absoluteFillObject,
@@ -540,7 +599,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         color: colors.text.secondary,
         fontSize: 14,
         fontWeight: '500',
-    },    notebookBtn: {
+    }, notebookBtn: {
         minWidth: 100,
         flexDirection: 'row',
         alignItems: 'center',

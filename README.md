@@ -155,9 +155,23 @@ npx expo start
 
 # Run on a connected Android device / emulator
 npx expo run:android
+
+# Run the web version in a browser
+npx expo start --web
+# or build a production static bundle:
+npm run build:web
 ```
 
 > **Note:** This is an Expo dev-client project. Features like SQLite, OCR, and haptics require a native build — Expo Go will not work.
+
+### Web Version
+
+The web version runs entirely in the browser using `localStorage` instead of SQLite. It supports the full question/solution editing workflow and exports in the same **v3 `.algodeck`** format, so you can:
+
+1. Create and manage flashcards on **web** → click **Export** (Settings tab) → downloads an `.algodeck` file
+2. Open the **mobile app** → Settings → Import → pick the `.algodeck` file → all your cards appear instantly
+
+Features disabled on web (native-only): push notifications, haptic feedback, screen rotation lock.
 
 ---
 

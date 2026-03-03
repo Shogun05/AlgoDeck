@@ -1,6 +1,13 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openspacelabs/react-native-zoomable-view/src/ReactNativeZoomableView": [
+        "src/typings/zoomableView.d.ts"
+      ]
+    }
   }
 }

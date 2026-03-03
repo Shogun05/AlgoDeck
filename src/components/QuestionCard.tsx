@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Question } from '../types';
 import { DifficultyBadge, TagChip } from './TagChip';
 import { formatRelativeDate } from '../utils/helpers';
+import { useWebImage } from '../hooks/useWebImage';
 import theme from '../theme/theme';
 import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 
@@ -15,12 +16,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress })
     const { colors, isDarkMode } = useAppTheme();
     const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
+    const displayImageUri = useWebImage(question?.screenshot_path);
+
     return (
         <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
             <View style={styles.content}>
-                {question.screenshot_path ? (
+                {displayImageUri ? (
                     <Image
-                        source={{ uri: question.screenshot_path }}
+                        source={{ uri: displayImageUri }}
                         style={styles.thumbnail}
                         resizeMode="cover"
                     />
