@@ -1,6 +1,7 @@
 import { Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { unzip } from 'react-native-zip-archive';
 import { getDatabase, rebuildFTS } from '../db/database';
 import { BackupData } from '../types';
 import { getNow } from '../utils/helpers';
@@ -26,8 +27,25 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         }
 
         const fileUri = result.assets[0].uri;
-        const content = await FileSystem.readAsStringAsync(fileUri);
-        const data = JSON.parse(content) as any;
+        let data: any;
+        let isZip = false;
+        const tempUnzipDir = FileSystem.cacheDirectory + 'import_unzip_' + Date.now() + '/';
+
+        // Read the first few characters to check if it's plaintext JSON vs a binary ZIP
+        const peek = await FileSystem.readAsStringAsync(fileUri, { length: 5 });
+
+        if (peek.trim().startsWith('{')) {
+            // It's a legacy JSON fallback (v1, v2, v3)
+            const content = await FileSystem.readAsStringAsync(fileUri);
+            data = JSON.parse(content);
+        } else {
+            // Treat as v4+ ZIP archive
+            isZip = true;
+            await ensureDir(tempUnzipDir);
+            await unzip(fileUri, tempUnzipDir);
+            const content = await FileSystem.readAsStringAsync(tempUnzipDir + 'data.json');
+            data = JSON.parse(content);
+        }
 
         // Validate
         if (!data.questions || !Array.isArray(data.questions)) {
@@ -41,13 +59,15 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         }
 
         const isV2 = data.version === 2;
-        const isV3 = data.version >= 3;
+        const isV3 = data.version === 3;
+        const isV4 = data.version >= 4; // ZIP based
         let imagesRestored = 0;
         let notebooksRestored = 0;
 
-        // If v2+, restore images from base64 to disk
-        if (isV2 || isV3) {
-            await ensureDir(IMAGES_DIR);
+        await ensureDir(IMAGES_DIR);
+
+        // If legacy v2/v3 base64 bundles, restore directly
+        if ((isV2 || isV3) && !isZip) {
             for (const q of data.questions) {
                 if (q._image_base64) {
                     const ext = q._image_ext || 'jpg';
@@ -56,9 +76,24 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
                     await FileSystem.writeAsStringAsync(imgPath, q._image_base64, {
                         encoding: FileSystem.EncodingType.Base64,
                     });
-                    // Update the screenshot_path to point to the restored file
                     q.screenshot_path = imgPath;
                     imagesRestored++;
+                }
+            }
+        }
+        // If v4+ ZIP payload, copy physical files out of unzipped `/images` directory
+        else if (isV4 && isZip) {
+            for (const q of data.questions) {
+                if (q._image_filename) {
+                    const srcPath = tempUnzipDir + 'images/' + q._image_filename;
+                    const srcInfo = await FileSystem.getInfoAsync(srcPath);
+                    if (srcInfo.exists) {
+                        const imgFilename = `restored_${q.id}_${Date.now()}.${q._image_filename.split('.').pop()}`;
+                        const imgPath = IMAGES_DIR + imgFilename;
+                        await FileSystem.copyAsync({ from: srcPath, to: imgPath });
+                        q.screenshot_path = imgPath;
+                        imagesRestored++;
+                    }
                 }
             }
         }
@@ -191,7 +226,12 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         // Rebuild the FTS5 inverted index so imported OCR text is searchable
         await rebuildFTS();
 
-        const imgMsg = (isV2 || isV3) ? ` (${imagesRestored} images restored)` : '';
+        // Clean up temp dir if we extracted a ZIP payload
+        if (isZip) {
+            try { await FileSystem.deleteAsync(tempUnzipDir); } catch { /* ignore */ }
+        }
+
+        const imgMsg = (isV2 || isV3 || isV4) ? ` (${imagesRestored} images restored)` : '';
         const nbMsg = notebooksRestored > 0 ? `, ${notebooksRestored} notebooks` : '';
         return {
             success: true,
@@ -201,6 +241,3 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         return { success: false, message: `Import failed: ${error.message}` };
     }
 };
-
-// Keep legacy alias
-export const importJSON = importBackup;

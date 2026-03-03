@@ -34,6 +34,7 @@
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "idb-keyval": "^6.2.2",
+    "jszip": "^3.10.1",
     "lodash": "^4.17.23",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -44,6 +45,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "^0.21.0",
+    "react-native-zip-archive": "^7.0.2",
     "tesseract.js": "^4.1.1",
     "zustand": "^4.5.5"
   },

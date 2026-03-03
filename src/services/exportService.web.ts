@@ -3,6 +3,7 @@
  * Builds the same v3 .algodeck JSON and triggers a browser download.
  * No expo-file-system or expo-sharing needed.
  */
+import JSZip from 'jszip';
 import { questionService } from '../db/questionService';
 import { solutionService } from '../db/solutionService';
 import { revisionService } from '../db/revisionService';
@@ -11,9 +12,8 @@ import { generateFilename } from '../utils/helpers';
 import { loadWebImage, extractBase64, extractExt } from '../db/webStorage';
 
 /** Trigger a browser file download */
-const browserDownload = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
+/** Trigger a browser file download */
+const browserDownloadUrl = (url: string, filename: string) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -24,6 +24,12 @@ const browserDownload = (content: string, filename: string) => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }, 200);
+};
+
+const browserDownload = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    browserDownloadUrl(url, filename);
 };
 
 /** Export all (or a single notebook) as a v3 .algodeck file — same format as mobile. */
@@ -37,18 +43,24 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
     const solutions = notebookId ? allSolutions.filter(s => qIds.has(s.question_id)) : allSolutions;
     const filteredLogs = notebookId ? revisionLogs.filter(l => qIds.has(l.question_id)) : revisionLogs;
 
-    // Bundle images as base64 (web images are stored as data URIs in localStorage)
+    const zip = new JSZip();
+    const imagesFolder = zip.folder("images");
+
+    // Map questions, extracting images dynamically into the zip /images/ folder
     const bundledQuestions = await Promise.all(questions.map(async q => {
-        let imageBase64 = '';
-        let imageExt = 'jpg';
+        let imageFilename = '';
         if (q.screenshot_path && q.screenshot_path.startsWith('web://img/')) {
             const dataUri = await loadWebImage(q.screenshot_path);
             if (dataUri) {
-                imageBase64 = extractBase64(dataUri);
-                imageExt = extractExt(dataUri);
+                const base64 = extractBase64(dataUri);
+                const ext = extractExt(dataUri) || 'jpg';
+                imageFilename = `${q.id}_image.${ext}`;
+                if (imagesFolder && base64) {
+                    imagesFolder.file(imageFilename, base64, { base64: true });
+                }
             }
         }
-        return { ...q, _image_base64: imageBase64, _image_ext: imageExt };
+        return { ...q, _image_filename: imageFilename || undefined };
     }));
 
     const exportedNbIds = new Set(
@@ -59,7 +71,7 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         : allNotebooks.filter(nb => exportedNbIds.has(nb.id));
 
     const backup = {
-        version: 3,
+        version: 4, // Bump version to 4 for ZIP payload structure
         exported_at: new Date().toISOString(),
         notebooks: notebooksToExport,
         questions: bundledQuestions,
@@ -67,9 +79,13 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         revision_logs: filteredLogs,
     };
 
+    zip.file('data.json', JSON.stringify(backup));
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const zipUrl = URL.createObjectURL(zipBlob);
+
     const filename = generateFilename('algodeck_backup', 'algodeck');
-    const content = JSON.stringify(backup);
-    browserDownload(content, filename);
+    browserDownloadUrl(zipUrl, filename);
     return filename;
 };
 

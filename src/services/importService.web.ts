@@ -4,11 +4,12 @@
  * and writes into localStorage — same logic as the native version.
  */
 import { Alert, Platform } from 'react-native';
+import JSZip from 'jszip';
 import { WEB_KEYS, loadTable, saveTable, nextId, saveWebImage } from '../db/webStorage';
 import { Question, Solution, RevisionLog, Notebook } from '../types';
 import { getNow } from '../utils/helpers';
 
-const pickFile = (): Promise<string> =>
+const pickFile = (): Promise<ArrayBuffer | string> =>
     new Promise((resolve, reject) => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -18,9 +19,10 @@ const pickFile = (): Promise<string> =>
             const file = input.files?.[0];
             if (!file) return reject(new Error('No file selected'));
             const reader = new FileReader();
-            reader.onload = e => resolve(e.target?.result as string);
+            reader.onload = e => resolve(e.target?.result as ArrayBuffer | string);
             reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsText(file);
+            // Read as ArrayBuffer to support binary ZIP payloads safely
+            reader.readAsArrayBuffer(file);
         };
         input.oncancel = () => reject(new Error('cancelled'));
         document.body.appendChild(input);
@@ -29,9 +31,9 @@ const pickFile = (): Promise<string> =>
     });
 
 export const importBackup = async (): Promise<{ success: boolean; message: string }> => {
-    let content: string;
+    let rawContent: ArrayBuffer | string;
     try {
-        content = await pickFile();
+        rawContent = await pickFile();
     } catch (e: any) {
         if (e.message === 'cancelled' || e.message === 'No file selected') {
             return { success: false, message: 'Import cancelled' };
@@ -40,7 +42,39 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
     }
 
     try {
-        const data = JSON.parse(content) as any;
+        let data: any;
+        let isZip = false;
+        let loadedZip: JSZip | null = null;
+
+        // Peek at data to see if it's plaintext JSON
+        let isLegacyJson = false;
+        if (typeof rawContent === 'string') {
+            isLegacyJson = rawContent.trim().startsWith('{');
+        } else if (rawContent instanceof ArrayBuffer) {
+            const peekView = new Uint8Array(rawContent, 0, Math.min(5, rawContent.byteLength));
+            const peekString = String.fromCharCode.apply(null, Array.from(peekView));
+            isLegacyJson = peekString.trim().startsWith('{');
+        }
+
+        if (isLegacyJson) {
+            // v1/v2/v3 Plain JSON fallback
+            let jsonStr = '';
+            if (typeof rawContent === 'string') {
+                jsonStr = rawContent;
+            } else {
+                const decoder = new TextDecoder('utf-8');
+                jsonStr = decoder.decode(rawContent as ArrayBuffer);
+            }
+            data = JSON.parse(jsonStr);
+        } else {
+            // v4+ Binary ZIP archive
+            isZip = true;
+            loadedZip = await JSZip.loadAsync(rawContent);
+            const jsonFile = loadedZip.file('data.json');
+            if (!jsonFile) throw new Error('data.json not found inside archive');
+            const jsonStr = await jsonFile.async('string');
+            data = JSON.parse(jsonStr);
+        }
 
         if (!data.questions || !Array.isArray(data.questions)) {
             return { success: false, message: 'Invalid backup: missing questions array' };
@@ -52,7 +86,9 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             return { success: false, message: 'Invalid backup: missing revision_logs array' };
         }
 
-        const isV3 = (data.version ?? 1) >= 3;
+        const isV2 = data.version === 2;
+        const isV3 = data.version === 3;
+        const isV4 = data.version >= 4;
         let imagesRestored = 0;
         let notebooksRestored = 0;
 
@@ -147,10 +183,21 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             const newId = nextId(existingQuestions);
             questionIdMap.set(q.id, newId);
 
-            if (q._image_base64) {
+            if ((isV2 || isV3) && !isZip && q._image_base64) {
+                // Legacy inline base64
                 const dataUri = `data:image/${q._image_ext || 'jpg'};base64,${q._image_base64}`;
                 screenshotPath = await saveWebImage(newId, dataUri);
                 imagesRestored++;
+            } else if (isV4 && isZip && loadedZip && q._image_filename) {
+                // Read from zipped virtual fs
+                const imgFile = loadedZip.file('images/' + q._image_filename);
+                if (imgFile) {
+                    const base64Str = await imgFile.async('base64');
+                    const ext = q._image_filename.split('.').pop() || 'jpg';
+                    const dataUri = `data:image/${ext};base64,${base64Str}`;
+                    screenshotPath = await saveWebImage(newId, dataUri);
+                    imagesRestored++;
+                }
             }
 
             let notebookId: number | null = null;
@@ -217,5 +264,3 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         return { success: false, message: `Import failed: ${error.message}` };
     }
 };
-
-export const importJSON = importBackup;

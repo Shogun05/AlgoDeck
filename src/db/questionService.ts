@@ -169,13 +169,13 @@ export const questionService = {
         const today = getToday();
         if (notebookId !== undefined && notebookId !== null) {
             const rows = await db.getAllAsync<QuestionRow>(
-                'SELECT * FROM questions WHERE notebook_id = ? AND (next_review_date IS NULL OR next_review_date <= ?) ORDER BY next_review_date ASC',
+                'SELECT * FROM questions WHERE notebook_id = ? AND (next_review_date IS NULL OR next_review_date <= ?) ORDER BY RANDOM()',
                 [notebookId, today]
             );
             return rows.map(rowToQuestion);
         }
         const rows = await db.getAllAsync<QuestionRow>(
-            'SELECT * FROM questions WHERE next_review_date IS NULL OR next_review_date <= ? ORDER BY next_review_date ASC',
+            'SELECT * FROM questions WHERE next_review_date IS NULL OR next_review_date <= ? ORDER BY RANDOM()',
             [today]
         );
         return rows.map(rowToQuestion);

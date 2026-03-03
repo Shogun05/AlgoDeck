@@ -22,13 +22,16 @@ export const QuestionDetailScreen: React.FC = () => {
     const route = useRoute<any>();
     const { questionId } = route.params;
     const { deleteQuestion, updateQuestion, allTags, loadQuestions } = useQuestionStore();
-    const { notebooks } = useNotebookStore();
+    const { notebooks, createNotebook } = useNotebookStore();
     const [question, setQuestion] = useState<Question | null>(null);
     const [showImageZoom, setShowImageZoom] = useState(false);
     const [showOcrText, setShowOcrText] = useState(false);
     const [showNotebookPicker, setShowNotebookPicker] = useState(false);
+    const [showDifficultyPicker, setShowDifficultyPicker] = useState(false);
     const { colors, isDarkMode } = useAppTheme();
     const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
+
+    const [newNbInput, setNewNbInput] = useState('');
 
     // Tag editing state
     const [showTagEditor, setShowTagEditor] = useState(false);
@@ -109,6 +112,25 @@ export const QuestionDetailScreen: React.FC = () => {
         setQuestion(prev => prev ? { ...prev, notebook_id: notebookId } : prev);
         setShowNotebookPicker(false);
         loadQuestions();
+    };
+
+    const handleChangeDifficulty = async (level: any) => {
+        if (!question) return;
+        hapticService.success();
+        await updateQuestion(question.id, { difficulty: level });
+        setQuestion(prev => prev ? { ...prev, difficulty: level } : prev);
+        setShowDifficultyPicker(false);
+        loadQuestions();
+    };
+
+    const handleCreateNb = async () => {
+        const name = newNbInput.trim();
+        if (!name) return;
+        hapticService.success();
+        const rColor = `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+        const newId = await createNotebook(name, rColor);
+        setNewNbInput('');
+        handleChangeNotebook(newId);
     };
 
     const currentNotebook = question?.notebook_id
@@ -220,7 +242,9 @@ export const QuestionDetailScreen: React.FC = () => {
 
                 {/* Info Row */}
                 <View style={styles.infoRow}>
-                    <DifficultyBadge difficulty={question.difficulty} />
+                    <TouchableOpacity onPress={() => { hapticService.light(); setShowDifficultyPicker(true); }}>
+                        <DifficultyBadge difficulty={question.difficulty} />
+                    </TouchableOpacity>
                     <View style={styles.tagsRow}>
                         {question.tags.map((tag, i) => (
                             <TagChip key={i} label={tag} />
@@ -283,12 +307,13 @@ export const QuestionDetailScreen: React.FC = () => {
                 animationType="slide"
                 onRequestClose={() => { setShowTagEditor(false); setTagSearch(''); }}
             >
-                <TouchableOpacity
-                    style={styles.tagModalOverlay}
-                    activeOpacity={1}
-                    onPress={() => { setShowTagEditor(false); setTagSearch(''); }}
-                >
-                    <View style={styles.tagModalContent} onStartShouldSetResponder={() => true}>
+                <View style={styles.tagModalOverlay}>
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        activeOpacity={1}
+                        onPress={() => { setShowTagEditor(false); setTagSearch(''); }}
+                    />
+                    <View style={styles.tagModalContent}>
                         <View style={styles.tagModalHeader}>
                             <Text style={styles.tagModalTitle}>Edit Tags</Text>
                             <TouchableOpacity onPress={saveTagEdits}>
@@ -377,7 +402,7 @@ export const QuestionDetailScreen: React.FC = () => {
                             </View>
                         </View>
                     </View>
-                </TouchableOpacity>
+                </View>
             </Modal>
 
             {/* Notebook Picker Modal */}
@@ -387,37 +412,58 @@ export const QuestionDetailScreen: React.FC = () => {
                 animationType="fade"
                 onRequestClose={() => setShowNotebookPicker(false)}
             >
-                <TouchableOpacity
-                    style={styles.tagModalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowNotebookPicker(false)}
-                >
-                    <View style={styles.nbSheet} onStartShouldSetResponder={() => true}>
+                <View style={styles.tagModalOverlay}>
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        activeOpacity={1}
+                        onPress={() => setShowNotebookPicker(false)}
+                    />
+                    <View style={styles.nbSheet}>
                         <Text style={styles.tagModalTitle}>Move to Notebook</Text>
 
-                        {/* None */}
-                        <TouchableOpacity
-                            style={[styles.nbRow, question.notebook_id === null && styles.nbRowActive]}
-                            onPress={() => handleChangeNotebook(null)}
-                        >
-                            <Ionicons name="close-circle-outline" size={16} color={colors.text.tertiary} />
-                            <Text style={[styles.nbRowText, question.notebook_id === null && styles.nbRowTextActive]}>None</Text>
-                            {question.notebook_id === null && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-                        </TouchableOpacity>
-
-                        {notebooks.map(nb => (
+                        {/* Inline Create */}
+                        <View style={styles.createNotebookRow}>
+                            <TextInput
+                                style={styles.tagModalCreateInput}
+                                value={newNbInput}
+                                onChangeText={setNewNbInput}
+                                placeholder="Create new notebook..."
+                                placeholderTextColor={colors.text.tertiary}
+                            />
                             <TouchableOpacity
-                                key={nb.id}
-                                style={[styles.nbRow, question.notebook_id === nb.id && styles.nbRowActive]}
-                                onPress={() => handleChangeNotebook(nb.id)}
+                                style={[styles.createNotebookBtn, !newNbInput.trim() && { opacity: 0.5 }]}
+                                onPress={handleCreateNb}
+                                disabled={!newNbInput.trim()}
                             >
-                                <View style={[styles.nbDot, { backgroundColor: nb.color }]} />
-                                <Text style={[styles.nbRowText, question.notebook_id === nb.id && styles.nbRowTextActive]}>{nb.name}</Text>
-                                {question.notebook_id === nb.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                                <Ionicons name="add" size={20} color="#fff" />
                             </TouchableOpacity>
-                        ))}
+                        </View>
+
+                        <ScrollView style={{ maxHeight: 250, marginTop: 12 }}>
+                            {/* None */}
+                            <TouchableOpacity
+                                style={[styles.nbRow, question.notebook_id === null && styles.nbRowActive]}
+                                onPress={() => handleChangeNotebook(null)}
+                            >
+                                <Ionicons name="close-circle-outline" size={16} color={colors.text.tertiary} />
+                                <Text style={[styles.nbRowText, question.notebook_id === null && styles.nbRowTextActive]}>None (Remove)</Text>
+                                {question.notebook_id === null && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                            </TouchableOpacity>
+
+                            {notebooks.map(nb => (
+                                <TouchableOpacity
+                                    key={nb.id}
+                                    style={[styles.nbRow, question.notebook_id === nb.id && styles.nbRowActive]}
+                                    onPress={() => handleChangeNotebook(nb.id)}
+                                >
+                                    <View style={[styles.nbDot, { backgroundColor: nb.color }]} />
+                                    <Text style={[styles.nbRowText, question.notebook_id === nb.id && styles.nbRowTextActive]}>{nb.name}</Text>
+                                    {question.notebook_id === nb.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </View>
-                </TouchableOpacity>
+                </View>
             </Modal>
 
             {/* Image Zoom Modal */}
@@ -476,6 +522,39 @@ export const QuestionDetailScreen: React.FC = () => {
                     </View>
                 </Modal>
             ) : null}
+            {/* Difficulty Picker Modal */}
+            <Modal
+                visible={showDifficultyPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDifficultyPicker(false)}
+            >
+                <View style={styles.tagModalOverlay}>
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        activeOpacity={1}
+                        onPress={() => setShowDifficultyPicker(false)}
+                    />
+                    <View style={styles.nbSheet}>
+                        <Text style={styles.tagModalTitle}>Change Difficulty</Text>
+
+                        <ScrollView style={{ marginTop: 16 }}>
+                            {['Easy', 'Medium', 'Hard'].map(level => (
+                                <TouchableOpacity
+                                    key={level}
+                                    style={[styles.nbRow, question.difficulty === level && styles.nbRowActive]}
+                                    onPress={() => handleChangeDifficulty(level)}
+                                >
+                                    <View style={[styles.nbDot, { backgroundColor: colors.difficulty[level.toLowerCase() as keyof typeof colors.difficulty] }]} />
+                                    <Text style={[styles.nbRowText, question.difficulty === level && styles.nbRowTextActive]}>{level}</Text>
+                                    {question.difficulty === level && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
         </View>
     );
 };
@@ -840,5 +919,18 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
     nbRowTextActive: {
         fontWeight: '700',
         color: colors.primary,
+    },
+    createNotebookRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 16,
+    },
+    createNotebookBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

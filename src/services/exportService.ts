@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import { zip } from 'react-native-zip-archive';
 import { questionService } from '../db/questionService';
 import { solutionService } from '../db/solutionService';
 import { revisionService } from '../db/revisionService';
@@ -17,15 +18,23 @@ const ensureDir = async (dir: string) => {
     }
 };
 
-// ─── ZIP-LIKE EXPORT (JSON + base64 images bundled) ──────────
+// ─── NATIVE ZIP EXPORT (.algodeck true ZIP format) ──────────
 export const exportZip = async (notebookId?: number): Promise<string> => {
     await ensureDir(EXPORT_DIR);
+
+    // We create a temporary staging directory to assemble the package
+    const STAGING_DIR = EXPORT_DIR + 'staging/';
+    const STAGING_IMG_DIR = STAGING_DIR + 'images/';
+
+    // Wipe any previous staging junk
+    try { await FileSystem.deleteAsync(STAGING_DIR); } catch { /* ignore */ }
+    await ensureDir(STAGING_DIR);
+    await ensureDir(STAGING_IMG_DIR);
 
     let questions = await questionService.getAll(notebookId);
     const allSolutions = await solutionService.getAll();
     const revisionLogs = await revisionService.getAll();
 
-    // Filter solutions to only include ones for exported questions
     const qIds = new Set(questions.map(q => q.id));
     const solutions = notebookId
         ? allSolutions.filter(s => qIds.has(s.question_id))
@@ -34,48 +43,31 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         ? revisionLogs.filter(l => qIds.has(l.question_id))
         : revisionLogs;
 
-    // Bundle images as base64 inside the JSON
+    // Build the updated questions list, but DO NOT embed raw base64. 
+    // Simply physically copy the images into the staging /images/ directory.
     const bundledQuestions = [];
     for (const q of questions) {
-        let imageBase64 = '';
-        let imageExt = 'jpg';
+        let imageFilename = '';
         if (q.screenshot_path) {
             try {
-                if (Platform.OS === 'web') {
-                    const res = await fetch(q.screenshot_path);
-                    const blob = await res.blob();
-                    imageBase64 = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                            const result = reader.result as string;
-                            resolve(result.split(',')[1] || '');
-                        };
-                        reader.readAsDataURL(blob);
+                const srcInfo = await FileSystem.getInfoAsync(q.screenshot_path);
+                if (srcInfo.exists) {
+                    const ext = q.screenshot_path.split('.').pop() || 'jpg';
+                    imageFilename = `${q.id}_image.${ext}`;
+                    await FileSystem.copyAsync({
+                        from: q.screenshot_path,
+                        to: STAGING_IMG_DIR + imageFilename,
                     });
-                    const parts = q.screenshot_path.split('.');
-                    imageExt = parts[parts.length - 1] || 'jpg';
-                } else {
-                    const srcInfo = await FileSystem.getInfoAsync(q.screenshot_path);
-                    if (srcInfo.exists) {
-                        imageBase64 = await FileSystem.readAsStringAsync(q.screenshot_path, {
-                            encoding: FileSystem.EncodingType.Base64,
-                        });
-                        const parts = q.screenshot_path.split('.');
-                        imageExt = parts[parts.length - 1] || 'jpg';
-                    }
                 }
-            } catch { /* skip missing images */ }
+            } catch { /* skip missing */ }
         }
         bundledQuestions.push({
             ...q,
-            _image_base64: imageBase64,
-            _image_ext: imageExt,
+            _image_filename: imageFilename || undefined,
         });
     }
 
-    // Get notebooks for metadata
     const allNotebooks = await notebookService.getAll();
-    // Include only relevant notebooks (or all if full export)
     const exportedNotebookIds = new Set(
         bundledQuestions.map(q => q.notebook_id).filter((id): id is number => id != null)
     );
@@ -84,7 +76,7 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         : allNotebooks.filter(nb => exportedNotebookIds.has(nb.id));
 
     const bundledBackup = {
-        version: 3,
+        version: 4, // Bump version to 4 to signify ZIP structure instead of JSON payload structure
         exported_at: new Date().toISOString(),
         notebooks: notebooksToExport,
         questions: bundledQuestions,
@@ -92,11 +84,23 @@ export const exportZip = async (notebookId?: number): Promise<string> => {
         revision_logs: filteredLogs,
     };
 
-    const filename = generateFilename('algodeck_backup', 'algodeck');
-    const filepath = EXPORT_DIR + filename;
-    await FileSystem.writeAsStringAsync(filepath, JSON.stringify(bundledBackup));
+    // Write metadata to the core data.json file inside the ZIP staging foldler
+    const dataJsonPath = STAGING_DIR + 'data.json';
+    await FileSystem.writeAsStringAsync(dataJsonPath, JSON.stringify(bundledBackup));
 
-    return filepath;
+    // Finally, run native thread background zip compression on the entire folder!
+    const filename = generateFilename('algodeck_backup', 'algodeck');
+    const outpath = EXPORT_DIR + filename;
+
+    // Ensure old zip with same name is deleted, else zip-archive appends instead of overwriting
+    try { await FileSystem.deleteAsync(outpath); } catch { /* ignore */ }
+
+    await zip(STAGING_DIR, outpath);
+
+    // Clean up staging footprint
+    try { await FileSystem.deleteAsync(STAGING_DIR); } catch { /* ignore */ }
+
+    return outpath;
 };
 
 export const shareFile = async (filepath: string): Promise<void> => {

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Question } from '../types';
 import { DifficultyBadge, TagChip } from './TagChip';
 import { formatRelativeDate } from '../utils/helpers';
@@ -10,16 +11,33 @@ import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
 interface QuestionCardProps {
     question: Question;
     onPress: () => void;
+    onLongPress?: () => void;
+    isSelected?: boolean;
+    selectionMode?: boolean;
 }
 
-export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress }) => {
+export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress, onLongPress, isSelected, selectionMode }) => {
     const { colors, isDarkMode } = useAppTheme();
     const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
     const displayImageUri = useWebImage(question?.screenshot_path);
 
     return (
-        <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+        <TouchableOpacity
+            style={[styles.card, isSelected && styles.cardSelected]}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            activeOpacity={0.7}
+        >
+            {selectionMode && (
+                <View style={styles.selectionOverlay}>
+                    <Ionicons
+                        name={isSelected ? "checkmark-circle" : "ellipse-outline"}
+                        size={24}
+                        color={isSelected ? colors.primary : colors.text.tertiary}
+                    />
+                </View>
+            )}
             <View style={styles.content}>
                 {displayImageUri ? (
                     <Image
@@ -62,6 +80,18 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
             shadowRadius: 8,
             elevation: 0,
         } : theme.shadows.soft),
+    },
+    cardSelected: {
+        borderColor: colors.primary,
+        backgroundColor: isDark ? 'rgba(169, 133, 255, 0.08)' : 'rgba(169, 133, 255, 0.04)',
+    },
+    selectionOverlay: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        zIndex: 10,
+        backgroundColor: colors.bg.card,
+        borderRadius: 12,
     },
     content: {
         flexDirection: 'row',

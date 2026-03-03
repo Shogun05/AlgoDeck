@@ -121,7 +121,7 @@ export const questionService = {
             const matchNb = notebookId == null || q.notebook_id === notebookId;
             const isDue = !q.next_review_date || q.next_review_date <= today;
             return matchNb && isDue;
-        });
+        }).sort(() => Math.random() - 0.5);
     },
 
     async getRecentlyAdded(limit: number = 5): Promise<Question[]> {
