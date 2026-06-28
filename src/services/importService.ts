@@ -27,14 +27,19 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         }
 
         const fileUri = result.assets[0].uri;
+        const fileName = result.assets[0].name || '';
+        console.log('[import] Starting import. fileUri:', fileUri, 'fileName:', fileName);
+
         let data: any;
         let isZip = false;
         const tempUnzipDir = FileSystem.cacheDirectory + 'import_unzip_' + Date.now() + '/';
 
-        // Read the first few characters to check if it's plaintext JSON vs a binary ZIP
+        // Check if file is a plaintext JSON file (e.g. legacy json or web-exported json with .algodeck ext) or a ZIP archive
         const peek = await FileSystem.readAsStringAsync(fileUri, { length: 5 });
+        const isJson = peek.trim().startsWith('{');
+        console.log('[import] isJson:', isJson, 'tempUnzipDir:', tempUnzipDir);
 
-        if (peek.trim().startsWith('{')) {
+        if (isJson) {
             // It's a legacy JSON fallback (v1, v2, v3)
             const content = await FileSystem.readAsStringAsync(fileUri);
             data = JSON.parse(content);
@@ -42,8 +47,38 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             // Treat as v4+ ZIP archive
             isZip = true;
             await ensureDir(tempUnzipDir);
-            await unzip(fileUri, tempUnzipDir);
-            const content = await FileSystem.readAsStringAsync(tempUnzipDir + 'data.json');
+            
+            const fileInfo = await FileSystem.getInfoAsync(fileUri);
+            console.log('[import] Source fileInfo:', JSON.stringify(fileInfo));
+
+            const tempZipPath = FileSystem.cacheDirectory + 'import_temp_' + Date.now() + '.zip';
+            console.log('[import] Copying to tempZipPath:', tempZipPath);
+            await FileSystem.copyAsync({ from: fileUri, to: tempZipPath });
+            
+            const tempZipInfo = await FileSystem.getInfoAsync(tempZipPath);
+            console.log('[import] Temp fileInfo after copy:', JSON.stringify(tempZipInfo));
+
+            try {
+                console.log('[import] Unzipping...');
+                await unzip(tempZipPath, tempUnzipDir);
+                console.log('[import] Unzip successful!');
+            } catch (err: any) {
+                console.error('[import] Unzip error caught in JS:', err);
+                throw err;
+            } finally {
+                try {
+                    await FileSystem.deleteAsync(tempZipPath, { idempotent: true });
+                    console.log('[import] Cleaned up temp zip file');
+                } catch (err) {
+                    console.warn('Failed to clean up temp zip path', err);
+                }
+            }
+            
+            const dataJsonPath = tempUnzipDir + 'data.json';
+            const dataJsonInfo = await FileSystem.getInfoAsync(dataJsonPath);
+            console.log('[import] data.json info inside unzipped folder:', JSON.stringify(dataJsonInfo));
+
+            const content = await FileSystem.readAsStringAsync(dataJsonPath);
             data = JSON.parse(content);
         }
 
@@ -135,9 +170,9 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             }
         }
 
-        // Restore notebooks if v3
+        // Restore notebooks if v3 or v4
         const notebookIdMap = new Map<number, number>(); // old ID → new ID
-        if (isV3 && data.notebooks && Array.isArray(data.notebooks)) {
+        if ((isV3 || isV4) && data.notebooks && Array.isArray(data.notebooks)) {
             // Don't clear existing notebooks — merge them
             for (const nb of data.notebooks) {
                 // Check if notebook with same name already exists
@@ -181,7 +216,7 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             let notebookId = null;
             if (q.notebook_id && notebookIdMap.has(q.notebook_id)) {
                 notebookId = notebookIdMap.get(q.notebook_id);
-            } else if (q.notebook_id && !isV3) {
+            } else if (q.notebook_id && !(isV3 || isV4)) {
                 notebookId = q.notebook_id; // Preserve raw ID for v2
             }
             const res = await db.runAsync(

@@ -333,6 +333,10 @@ export const BrowseScreen: React.FC = () => {
                         selectionMode={isSelecting}
                         onLongPress={() => handleCardLongPress(item.id)}
                         onPress={() => handleCardPress(item.id)}
+                        onToggleStar={(id) => {
+                            hapticService.light();
+                            updateQuestion(id, { priority: item.priority === 1 ? 0 : 1 });
+                        }}
                     />
                 )}
                 contentContainerStyle={[styles.listContent, isSelecting && { paddingBottom: 160 }]}

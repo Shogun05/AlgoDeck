@@ -3,7 +3,7 @@
     "name": "AlgoDeck",
     "slug": "AlgoDeck",
     "scheme": "algodeck",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,6 +17,7 @@
       "supportsTablet": true
     },
     "android": {
+      "largeHeap": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#150f23"
@@ -31,7 +32,8 @@
     "plugins": [
       "expo-sqlite",
       "@react-native-community/datetimepicker",
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      "expo-font"
     ]
   }
 }

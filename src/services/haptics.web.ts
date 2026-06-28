@@ -16,11 +16,11 @@ export const hapticService = {
         await AsyncStorage.setItem(HAPTICS_KEY, String(enabled));
     },
     isEnabled() { return hapticsEnabled; },
-    light() { },
-    medium() { },
-    heavy() { },
-    success() { },
-    warning() { },
-    error() { },
-    selection() { },
+    light()   {},
+    medium()  {},
+    heavy()   {},
+    success() {},
+    warning() {},
+    error()   {},
+    selection() {},
 };

@@ -9,13 +9,20 @@ const REMINDER_MIN_KEY = 'algodeck_reminder_min';
 
 export const notificationService = {
     async requestPermissions(): Promise<boolean> { return false; },
-    async scheduleDailyReminder(_hour: number, _minute: number): Promise<void> {
+    async scheduleReminder(_hour: number, _minute: number): Promise<boolean> {
         await AsyncStorage.setItem(REMINDER_KEY, 'true');
         await AsyncStorage.setItem(REMINDER_HOUR_KEY, String(_hour));
         await AsyncStorage.setItem(REMINDER_MIN_KEY, String(_minute));
+        return false;
     },
     async cancelReminder(): Promise<void> {
         await AsyncStorage.setItem(REMINDER_KEY, 'false');
+    },
+    async getReminderSettings(): Promise<{ enabled: boolean; hour: number; minute: number }> {
+        const enabled = (await AsyncStorage.getItem(REMINDER_KEY)) === 'true';
+        const hour = parseInt((await AsyncStorage.getItem(REMINDER_HOUR_KEY)) || '9');
+        const minute = parseInt((await AsyncStorage.getItem(REMINDER_MIN_KEY)) || '0');
+        return { enabled, hour, minute };
     },
     async isReminderEnabled(): Promise<boolean> {
         const val = await AsyncStorage.getItem(REMINDER_KEY);

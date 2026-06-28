@@ -14,9 +14,10 @@ interface QuestionCardProps {
     onLongPress?: () => void;
     isSelected?: boolean;
     selectionMode?: boolean;
+    onToggleStar?: (id: number) => void;
 }
 
-export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress, onLongPress, isSelected, selectionMode }) => {
+export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress, onLongPress, isSelected, selectionMode, onToggleStar }) => {
     const { colors, isDarkMode } = useAppTheme();
     const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
 
@@ -58,6 +59,19 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, onPress, o
                         ))}
                     </View>
                 </View>
+                {onToggleStar && (
+                    <TouchableOpacity
+                        style={styles.starBtn}
+                        onPress={() => onToggleStar(question.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons
+                            name={question.priority === 1 ? "star" : "star-outline"}
+                            size={22}
+                            color={question.priority === 1 ? "#fbbf24" : colors.text.tertiary}
+                        />
+                    </TouchableOpacity>
+                )}
                 <View style={styles.badgeWrap}>
                     <DifficultyBadge difficulty={question.difficulty} small />
                 </View>
@@ -128,6 +142,9 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
     tagsRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
+    },
+    starBtn: {
+        padding: 4,
     },
     badgeWrap: {
         alignSelf: 'flex-start',

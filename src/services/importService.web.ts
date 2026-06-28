@@ -3,13 +3,12 @@
  * Uses a hidden <input type="file"> to pick a .algodeck file, then reads it
  * and writes into localStorage — same logic as the native version.
  */
-import { Alert, Platform } from 'react-native';
-import JSZip from 'jszip';
-import { WEB_KEYS, loadTable, saveTable, nextId, saveWebImage } from '../db/webStorage';
+import { WEB_KEYS, loadTable, saveTable, nextId, saveWebImage, clearWebImages } from '../db/webStorage';
 import { Question, Solution, RevisionLog, Notebook } from '../types';
 import { getNow } from '../utils/helpers';
+import JSZip from 'jszip';
 
-const pickFile = (): Promise<ArrayBuffer | string> =>
+const pickFile = (): Promise<File> =>
     new Promise((resolve, reject) => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -18,22 +17,22 @@ const pickFile = (): Promise<ArrayBuffer | string> =>
         input.onchange = () => {
             const file = input.files?.[0];
             if (!file) return reject(new Error('No file selected'));
-            const reader = new FileReader();
-            reader.onload = e => resolve(e.target?.result as ArrayBuffer | string);
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            // Read as ArrayBuffer to support binary ZIP payloads safely
-            reader.readAsArrayBuffer(file);
+            resolve(file);
         };
         input.oncancel = () => reject(new Error('cancelled'));
         document.body.appendChild(input);
         input.click();
-        setTimeout(() => document.body.removeChild(input), 5000);
+        setTimeout(() => {
+            if (document.body.contains(input)) {
+                document.body.removeChild(input);
+            }
+        }, 5000);
     });
 
 export const importBackup = async (): Promise<{ success: boolean; message: string }> => {
-    let rawContent: ArrayBuffer | string;
+    let file: File;
     try {
-        rawContent = await pickFile();
+        file = await pickFile();
     } catch (e: any) {
         if (e.message === 'cancelled' || e.message === 'No file selected') {
             return { success: false, message: 'Import cancelled' };
@@ -42,38 +41,31 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
     }
 
     try {
+        const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target?.result as ArrayBuffer);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsArrayBuffer(file);
+        });
+
+        const uint8 = new Uint8Array(arrayBuffer);
+        const isZip = uint8[0] === 0x50 && uint8[1] === 0x4b && uint8[2] === 0x03 && uint8[3] === 0x04;
+
         let data: any;
-        let isZip = false;
-        let loadedZip: JSZip | null = null;
+        let zip: JSZip | null = null;
 
-        // Peek at data to see if it's plaintext JSON
-        let isLegacyJson = false;
-        if (typeof rawContent === 'string') {
-            isLegacyJson = rawContent.trim().startsWith('{');
-        } else if (rawContent instanceof ArrayBuffer) {
-            const peekView = new Uint8Array(rawContent, 0, Math.min(5, rawContent.byteLength));
-            const peekString = String.fromCharCode.apply(null, Array.from(peekView));
-            isLegacyJson = peekString.trim().startsWith('{');
-        }
-
-        if (isLegacyJson) {
-            // v1/v2/v3 Plain JSON fallback
-            let jsonStr = '';
-            if (typeof rawContent === 'string') {
-                jsonStr = rawContent;
-            } else {
-                const decoder = new TextDecoder('utf-8');
-                jsonStr = decoder.decode(rawContent as ArrayBuffer);
+        if (isZip) {
+            zip = await JSZip.loadAsync(arrayBuffer);
+            const dataJsonFile = zip.file('data.json');
+            if (!dataJsonFile) {
+                return { success: false, message: 'Invalid backup: missing data.json inside zip' };
             }
-            data = JSON.parse(jsonStr);
+            const dataJsonText = await dataJsonFile.async('string');
+            data = JSON.parse(dataJsonText);
         } else {
-            // v4+ Binary ZIP archive
-            isZip = true;
-            loadedZip = await JSZip.loadAsync(rawContent);
-            const jsonFile = loadedZip.file('data.json');
-            if (!jsonFile) throw new Error('data.json not found inside archive');
-            const jsonStr = await jsonFile.async('string');
-            data = JSON.parse(jsonStr);
+            const decoder = new TextDecoder('utf-8');
+            const text = decoder.decode(uint8);
+            data = JSON.parse(text);
         }
 
         if (!data.questions || !Array.isArray(data.questions)) {
@@ -86,9 +78,7 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
             return { success: false, message: 'Invalid backup: missing revision_logs array' };
         }
 
-        const isV2 = data.version === 2;
-        const isV3 = data.version === 3;
-        const isV4 = data.version >= 4;
+        const isV3 = (data.version ?? 1) >= 3;
         let imagesRestored = 0;
         let notebooksRestored = 0;
 
@@ -112,92 +102,31 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
         }
 
         // ── Questions ────────────────────────────────────────────────────────
-        const existingQuestions = loadTable<Question>(WEB_KEYS.questions);
-        const existingSolutions = loadTable<Solution>(WEB_KEYS.solutions);
-        const existingLogs = loadTable<RevisionLog>(WEB_KEYS.revision_logs);
+        // Clear existing data
+        saveTable(WEB_KEYS.questions, []);
+        saveTable(WEB_KEYS.solutions, []);
+        saveTable(WEB_KEYS.revision_logs, []);
+        await clearWebImages();
 
-        // Pre-compute existing titles map
-        const existingTitles = new Map<string, number>();
-        for (const q of existingQuestions) {
-            existingTitles.set(q.title.toLowerCase().trim(), q.id);
-        }
-
-        let collisionCount = 0;
+        const questions: Question[] = [];
         for (const q of data.questions) {
-            if (existingTitles.has(q.title.toLowerCase().trim())) {
-                collisionCount++;
-            }
-        }
-
-        let policy: 'keep' | 'skip' | 'overwrite' = 'keep';
-        if (collisionCount > 0) {
-            if (Platform.OS === 'web') {
-                const ans = window.prompt(`Found ${collisionCount} duplicates.\nType 'skip' to ignore incoming,\n'overwrite' to replace existing,\nOr 'keep' to keep both (default):`, 'keep');
-                if (ans === 'skip' || ans === 'overwrite') policy = ans;
-            } else {
-                policy = await new Promise<'keep' | 'skip' | 'overwrite'>((resolve) => {
-                    Alert.alert(
-                        'Import Collisions Found',
-                        `Found ${collisionCount} questions with duplicate titles. How would you like to handle them?`,
-                        [
-                            { text: 'Keep Both', onPress: () => resolve('keep') },
-                            { text: 'Skip Incoming', onPress: () => resolve('skip') },
-                            { text: 'Overwrite Existing', style: 'destructive', onPress: () => resolve('overwrite') }
-                        ],
-                        { cancelable: false }
-                    );
-                });
-            }
-        }
-
-        const questionIdMap = new Map<number, number>();
-
-        for (const q of data.questions) {
-            const normalizedTitle = q.title.toLowerCase().trim();
-            if (existingTitles.has(normalizedTitle)) {
-                if (policy === 'skip') {
-                    continue;
-                } else if (policy === 'overwrite') {
-                    const oldId = existingTitles.get(normalizedTitle);
-                    if (oldId) {
-                        const qIndex = existingQuestions.findIndex(x => x.id === oldId);
-                        if (qIndex > -1) existingQuestions.splice(qIndex, 1);
-
-                        let i = existingSolutions.length;
-                        while (i--) {
-                            if (existingSolutions[i].question_id === oldId) existingSolutions.splice(i, 1);
-                        }
-
-                        let j = existingLogs.length;
-                        while (j--) {
-                            if (existingLogs[j].question_id === oldId) existingLogs.splice(j, 1);
-                        }
-
-                        existingTitles.delete(normalizedTitle);
-                    }
-                }
-            }
-
-            // Restore image from base64 into web localStorage image store
+            // Restore image from base64 or from within ZIP archive
             let screenshotPath = q.screenshot_path || '';
-            const newId = nextId(existingQuestions);
-            questionIdMap.set(q.id, newId);
-
-            if ((isV2 || isV3) && !isZip && q._image_base64) {
-                // Legacy inline base64
-                const dataUri = `data:image/${q._image_ext || 'jpg'};base64,${q._image_base64}`;
-                screenshotPath = await saveWebImage(newId, dataUri);
-                imagesRestored++;
-            } else if (isV4 && isZip && loadedZip && q._image_filename) {
-                // Read from zipped virtual fs
-                const imgFile = loadedZip.file('images/' + q._image_filename);
+            if (isZip && zip && q._image_filename) {
+                const imgPathInZip = `images/${q._image_filename}`;
+                const imgFile = zip.file(imgPathInZip);
                 if (imgFile) {
-                    const base64Str = await imgFile.async('base64');
                     const ext = q._image_filename.split('.').pop() || 'jpg';
-                    const dataUri = `data:image/${ext};base64,${base64Str}`;
-                    screenshotPath = await saveWebImage(newId, dataUri);
+                    const base64Data = await imgFile.async('base64');
+                    const dataUri = `data:image/${ext};base64,${base64Data}`;
+                    screenshotPath = await saveWebImage(q.id, dataUri);
                     imagesRestored++;
                 }
+            } else if (q._image_base64) {
+                const ext = q._image_ext || 'jpg';
+                const dataUri = `data:image/${ext};base64,${q._image_base64}`;
+                screenshotPath = await saveWebImage(q.id, dataUri);
+                imagesRestored++;
             }
 
             let notebookId: number | null = null;
@@ -207,8 +136,8 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
                 notebookId = q.notebook_id;
             }
 
-            existingQuestions.push({
-                id: newId,
+            questions.push({
+                id: q.id,
                 title: q.title,
                 difficulty: q.difficulty,
                 tags: Array.isArray(q.tags) ? q.tags : JSON.parse(q.tags || '[]'),
@@ -225,42 +154,40 @@ export const importBackup = async (): Promise<{ success: boolean; message: strin
                 repetition: q.repetition || 0,
             });
         }
-        saveTable(WEB_KEYS.questions, existingQuestions);
+        saveTable(WEB_KEYS.questions, questions);
 
         // ── Solutions ────────────────────────────────────────────────────────
-        for (const s of data.solutions) {
-            existingSolutions.push({
-                id: nextId(existingSolutions),
-                question_id: questionIdMap.get(s.question_id) ?? s.question_id,
-                tier: s.tier,
-                language: s.language || 'python',
-                code: s.code,
-                explanation: s.explanation || '',
-                time_complexity: s.time_complexity || '',
-                space_complexity: s.space_complexity || '',
-                created_at: s.created_at || getNow(),
-            });
-        }
-        saveTable(WEB_KEYS.solutions, existingSolutions);
+        const solutions: Solution[] = data.solutions.map((s: any) => ({
+            id: s.id,
+            question_id: s.question_id,
+            tier: s.tier,
+            language: s.language || 'python',
+            code: s.code,
+            explanation: s.explanation || '',
+            time_complexity: s.time_complexity || '',
+            space_complexity: s.space_complexity || '',
+            created_at: s.created_at || getNow(),
+        }));
+        saveTable(WEB_KEYS.solutions, solutions);
 
         // ── Revision logs ────────────────────────────────────────────────────
-        for (const r of data.revision_logs) {
-            existingLogs.push({
-                id: nextId(existingLogs),
-                question_id: questionIdMap.get(r.question_id) ?? r.question_id,
-                rating: r.rating,
-                timestamp: r.timestamp || getNow(),
-            });
-        }
-        saveTable(WEB_KEYS.revision_logs, existingLogs);
+        const logs: RevisionLog[] = data.revision_logs.map((r: any) => ({
+            id: r.id,
+            question_id: r.question_id,
+            rating: r.rating,
+            timestamp: r.timestamp || getNow(),
+        }));
+        saveTable(WEB_KEYS.revision_logs, logs);
 
         const imgMsg = imagesRestored > 0 ? ` (${imagesRestored} images restored)` : '';
         const nbMsg = notebooksRestored > 0 ? `, ${notebooksRestored} notebooks` : '';
         return {
             success: true,
-            message: `Imported ${data.questions.length} questions, ${data.solutions.length} solutions, ${data.revision_logs.length} revision logs${nbMsg}${imgMsg}`,
+            message: `Imported ${questions.length} questions, ${solutions.length} solutions, ${logs.length} revision logs${nbMsg}${imgMsg}`,
         };
     } catch (error: any) {
         return { success: false, message: `Import failed: ${error.message}` };
     }
 };
+
+export const importJSON = importBackup;

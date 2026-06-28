@@ -5,6 +5,8 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import theme from '../theme/theme';
 import { SyntaxHighlighter } from './SyntaxHighlighter';
 import { useAppTheme, ThemeColors } from '../theme/useAppTheme';
+import * as Clipboard from 'expo-clipboard';
+import { hapticService } from '../services/haptics';
 
 interface CodeBlockProps {
     code: string;
@@ -17,30 +19,55 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
     const { colors, isDarkMode } = useAppTheme();
     const styles = useMemo(() => createStyles(colors, isDarkMode), [isDarkMode]);
     const [fullscreen, setFullscreen] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const openFullscreen = useCallback(async () => {
         setFullscreen(true);
         if (Platform.OS !== 'web') {
-            try { await ScreenOrientation.unlockAsync(); } catch { }
+            try { await ScreenOrientation.unlockAsync(); } catch {}
         }
     }, []);
 
     const closeFullscreen = useCallback(async () => {
         setFullscreen(false);
         if (Platform.OS !== 'web') {
-            try { await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); } catch { }
+            try { await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); } catch {}
         }
     }, []);
+
+    const handleCopy = useCallback(async () => {
+        hapticService.light();
+        try {
+            await Clipboard.setStringAsync(code);
+            setCopied(true);
+            setTimeout(() => {
+                setCopied(false);
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy to clipboard:', err);
+        }
+    }, [code]);
 
     if (!code) return null;
 
     return (
         <View style={styles.wrapper}>
             <View style={styles.container}>
-                {/* Fullscreen button */}
-                <TouchableOpacity style={styles.fullscreenBtn} onPress={openFullscreen} activeOpacity={0.7}>
-                    <Ionicons name="expand-outline" size={16} color={isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)'} />
-                </TouchableOpacity>
+                {/* Top action buttons */}
+                <View style={styles.actionButtons}>
+                    {/* Copy to clipboard button */}
+                    <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.7}>
+                        <Ionicons 
+                            name={copied ? "checkmark-outline" : "copy-outline"} 
+                            size={16} 
+                            color={copied ? '#3FB950' : (isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)')} 
+                        />
+                    </TouchableOpacity>
+                    {/* Fullscreen button */}
+                    <TouchableOpacity style={styles.actionBtn} onPress={openFullscreen} activeOpacity={0.7}>
+                        <Ionicons name="expand-outline" size={16} color={isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)'} />
+                    </TouchableOpacity>
+                </View>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -61,16 +88,16 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                         <Text style={styles.language}>{language.toUpperCase()}</Text>
                     )}
                     <View style={styles.complexityRow}>
-                        {timeComplexity ? (
+                        {timeComplexity && (
                             <View style={styles.timeBadge}>
                                 <Text style={styles.timeText}>{timeComplexity} time</Text>
                             </View>
-                        ) : null}
-                        {spaceComplexity ? (
+                        )}
+                        {spaceComplexity && (
                             <View style={styles.spaceBadge}>
                                 <Text style={styles.spaceText}>{spaceComplexity} space</Text>
                             </View>
-                        ) : null}
+                        )}
                     </View>
                 </View>
             )}
@@ -91,21 +118,30 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, timeComple
                                 <Text style={styles.fsLang}>{language.toUpperCase()}</Text>
                             )}
                             <View style={styles.fsComplexityRow}>
-                                {timeComplexity ? (
+                                {timeComplexity && (
                                     <View style={styles.timeBadge}>
                                         <Text style={styles.timeText}>{timeComplexity}</Text>
                                     </View>
-                                ) : null}
-                                {spaceComplexity ? (
+                                )}
+                                {spaceComplexity && (
                                     <View style={styles.spaceBadge}>
                                         <Text style={styles.spaceText}>{spaceComplexity}</Text>
                                     </View>
-                                ) : null}
+                                )}
                             </View>
                         </View>
-                        <TouchableOpacity style={styles.fsCloseBtn} onPress={closeFullscreen}>
-                            <Ionicons name="close" size={22} color="#fff" />
-                        </TouchableOpacity>
+                        <View style={styles.fsHeaderRight}>
+                            <TouchableOpacity style={styles.fsCopyBtn} onPress={handleCopy} activeOpacity={0.7}>
+                                <Ionicons 
+                                    name={copied ? "checkmark-outline" : "copy-outline"} 
+                                    size={20} 
+                                    color={copied ? '#3FB950' : '#fff'} 
+                                />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.fsCloseBtn} onPress={closeFullscreen}>
+                                <Ionicons name="close" size={22} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                     {/* Code area — vertical scroll wraps horizontal so touch works full-width */}
                     <ScrollView
@@ -139,11 +175,15 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         overflow: 'hidden',
         position: 'relative',
     },
-    fullscreenBtn: {
+    actionButtons: {
         position: 'absolute',
         top: 8,
         right: 8,
         zIndex: 10,
+        flexDirection: 'row',
+        gap: 8,
+    },
+    actionBtn: {
         width: 32,
         height: 32,
         borderRadius: 8,
@@ -231,6 +271,19 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         flexDirection: 'row',
         gap: 8,
     },
+    fsHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    fsCopyBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     fsCloseBtn: {
         width: 36,
         height: 36,
@@ -238,7 +291,6 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create
         backgroundColor: 'rgba(255,255,255,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 12,
     },
     fsScrollV: {
         flex: 1,

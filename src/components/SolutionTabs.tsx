@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
 import { Solution, SolutionTier } from '../types';
 import { solutionService } from '../db/solutionService';
 import { CodeBlock } from './CodeBlock';
@@ -45,17 +45,25 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
 
     const handleDeleteSolution = (sol: Solution) => {
         hapticService.warning();
-        Alert.alert('Delete Solution', 'Remove this solution?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    await solutionService.delete(sol.id);
+        if (Platform.OS === 'web') {
+            if (window.confirm('Delete Solution\n\nRemove this solution?')) {
+                solutionService.delete(sol.id).then(() => {
                     loadSolutions();
+                });
+            }
+        } else {
+            Alert.alert('Delete Solution', 'Remove this solution?', [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await solutionService.delete(sol.id);
+                        loadSolutions();
+                    },
                 },
-            },
-        ]);
+            ]);
+        }
     };
 
     const tierSolutions = solutions.filter(s => s.tier === activeTier);
@@ -126,7 +134,7 @@ export const SolutionTabs: React.FC<SolutionTabsProps> = ({ questionId, onAddSol
                             {sol.explanation ? (
                                 <View style={styles.explanation}>
                                     <Text style={styles.explainLabel}>💡 LOGIC BREAKDOWN</Text>
-                                    <Text style={styles.explainText}>{sol.explanation}</Text>
+                                    <Text style={styles.explainText} selectable={true}>{sol.explanation}</Text>
                                 </View>
                             ) : null}
                         </View>

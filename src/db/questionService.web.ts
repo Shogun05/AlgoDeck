@@ -1,6 +1,6 @@
 import { Question, Difficulty } from '../types';
 import { getNow, getToday } from '../utils/helpers';
-import { WEB_KEYS, loadTable, saveTable, nextId, saveWebImage } from './webStorage';
+import { WEB_KEYS, loadTable, saveTable, nextId, saveWebImage, deleteWebImage } from './webStorage';
 
 const KEY = WEB_KEYS.questions;
 
@@ -34,9 +34,9 @@ export const questionService = {
         const all = loadTable<Question>(KEY);
         const id = nextId(all);
 
-        let finalScreenshotPath = data.screenshot_path;
-        if (finalScreenshotPath && finalScreenshotPath.startsWith('data:image')) {
-            finalScreenshotPath = await saveWebImage(id, finalScreenshotPath);
+        let screenshotPath = data.screenshot_path;
+        if (screenshotPath && screenshotPath.startsWith('data:image/')) {
+            screenshotPath = await saveWebImage(id, screenshotPath);
         }
 
         const q: Question = {
@@ -44,7 +44,7 @@ export const questionService = {
             title: data.title,
             difficulty: data.difficulty,
             tags: data.tags,
-            screenshot_path: finalScreenshotPath,
+            screenshot_path: screenshotPath,
             ocr_text: data.ocr_text,
             notes: data.notes,
             priority: data.priority,
@@ -66,21 +66,24 @@ export const questionService = {
         const idx = all.findIndex(q => q.id === id);
         if (idx === -1) return;
 
-        let finalScreenshotPath = data.screenshot_path;
-        if (finalScreenshotPath && finalScreenshotPath.startsWith('data:image')) {
-            finalScreenshotPath = await saveWebImage(id, finalScreenshotPath);
+        let screenshotPath = data.screenshot_path;
+        if (screenshotPath && screenshotPath.startsWith('data:image/')) {
+            screenshotPath = await saveWebImage(id, screenshotPath);
         }
 
-        const updatedData = { ...data };
-        if (finalScreenshotPath !== undefined) {
-            updatedData.screenshot_path = finalScreenshotPath;
-        }
-
-        all[idx] = { ...all[idx], ...updatedData };
+        all[idx] = {
+            ...all[idx],
+            ...data,
+            ...(screenshotPath !== undefined ? { screenshot_path: screenshotPath } : {})
+        };
         saveTable(KEY, all);
     },
 
     async delete(id: number): Promise<void> {
+        const question = loadTable<Question>(KEY).find(q => q.id === id);
+        if (question && question.screenshot_path) {
+            await deleteWebImage(question.screenshot_path);
+        }
         saveTable(KEY, loadTable<Question>(KEY).filter(q => q.id !== id));
     },
 
@@ -130,7 +133,8 @@ export const questionService = {
     },
 
     async getCount(): Promise<number> {
-        return loadTable<Question>(KEY).length;
+        const all = loadTable<Question>(KEY);
+        return all.length;
     },
 
     async getDueTodayCount(): Promise<number> {

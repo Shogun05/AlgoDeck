@@ -123,7 +123,7 @@ export const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({ code, lang
     };
 
     return (
-        <Text style={baseStyle}>
+        <Text style={baseStyle} selectable={true}>
             {tokens.map((token, index) => {
                 const style: TextStyle = {};
                 switch (token.type) {
